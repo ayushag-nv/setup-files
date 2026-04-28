@@ -50,7 +50,7 @@ cd wolfpack
 ./install.sh
 ```
 
-This builds the Go CLI, installs it to `~/.local/bin/wolfpack`, adds `~/.local/bin` to `PATH` through `~/.bashrc`, and prepares shared runtime dependencies.
+This builds the Go CLI, installs it to `~/.local/bin/wolfpack`, adds `~/.local/bin` to `PATH` through `~/.bashrc`, and prepares shared runtime dependencies plus non-AI developer tools.
 
 Install only the Wolfpack binary:
 
@@ -143,11 +143,13 @@ Check the local setup:
 wolfpack doctor
 ```
 
-Prepare shared dependencies without installing AI CLIs:
+Prepare shared dependencies and developer tools without installing AI CLIs:
 
 ```bash
 wolfpack deps
 ```
+
+This installs or prepares Node.js/npm, `uv`, Ruff, GitHub CLI, and GitLab CLI.
 
 ## Command Reference
 

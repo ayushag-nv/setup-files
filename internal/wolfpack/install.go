@@ -11,6 +11,19 @@ import (
 	"github.com/ayushag-nv/wolfpack/internal/wolfpack/tools"
 )
 
+type dependencyInstaller struct {
+	target string
+	label  string
+	run    func(config.Config) error
+}
+
+var developerDependencyInstallers = []dependencyInstaller{
+	{target: "uv", label: "uv", run: tools.InstallUV},
+	{target: "ruff", label: "Ruff", run: tools.InstallRuff},
+	{target: "gh", label: "GitHub CLI", run: tools.InstallGH},
+	{target: "glab", label: "GitLab CLI", run: tools.InstallGLab},
+}
+
 // installTarget runs the requested target, including the full "all" flow.
 func installTarget(cfg config.Config, target string) error {
 	normalized, err := normalizeTarget(target)
@@ -29,16 +42,7 @@ func installTarget(cfg config.Config, target string) error {
 		if err := installOpenCode(cfg); err != nil {
 			return err
 		}
-		if err := tools.InstallUV(cfg); err != nil {
-			return err
-		}
-		if err := tools.InstallRuff(cfg); err != nil {
-			return err
-		}
-		if err := tools.InstallGH(cfg); err != nil {
-			return err
-		}
-		if err := tools.InstallGLab(cfg); err != nil {
+		if err := installDeveloperDependencies(cfg); err != nil {
 			return err
 		}
 		if err := skills.Install(cfg); err != nil {
@@ -81,7 +85,17 @@ func installOpenCode(cfg config.Config) error {
 	return tools.InstallNPMTarget(cfg, "opencode")
 }
 
-// ensureDeps prepares shared dependencies without installing AI CLIs.
+// installDeveloperDependencies installs shared non-AI developer tools.
+func installDeveloperDependencies(cfg config.Config) error {
+	for _, installer := range developerDependencyInstallers {
+		if err := installer.run(cfg); err != nil {
+			return fmt.Errorf("install %s: %w", installer.label, err)
+		}
+	}
+	return nil
+}
+
+// ensureDeps prepares shared dependencies and developer tools without installing AI CLIs.
 func ensureDeps(cfg config.Config) error {
 	if err := system.AssertSupportedOS(); err != nil {
 		return err
@@ -96,6 +110,9 @@ func ensureDeps(cfg config.Config) error {
 		return err
 	}
 	if err := tools.EnsureNPMCLIPath(cfg); err != nil {
+		return err
+	}
+	if err := installDeveloperDependencies(cfg); err != nil {
 		return err
 	}
 	if err := system.InstallShellWrapper(cfg); err != nil {

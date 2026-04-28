@@ -14,7 +14,7 @@ Usage:
 
 Options:
   --no-deps    Only build and install the CLI binary. By default, the
-               installer also bootstraps runtime dependencies such as Node.js.
+               installer also bootstraps runtime dependencies and developer tools.
 EOF
 }
 
