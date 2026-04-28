@@ -1,11 +1,14 @@
 package main
 
+// doctor.go reports what Wolfpack can detect on the current machine.
+
 import (
 	"fmt"
 	"runtime"
 	"strings"
 )
 
+// doctor prints dependency, CLI, skill-directory, and rc-file status.
 func doctor(cfg config) error {
 	if err := assertSupportedOS(); err != nil {
 		return err

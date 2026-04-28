@@ -1,5 +1,7 @@
 package main
 
+// shellrc.go owns all managed edits to shell startup files.
+
 import (
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"strings"
 )
 
+// ensureManagedBlock creates the rc-file block used for Wolfpack env vars.
 func ensureManagedBlock(cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.rcFile), 0o755); err != nil {
 		return err
@@ -29,6 +32,7 @@ func ensureManagedBlock(cfg config) error {
 	return err
 }
 
+// upsertEnvVar inserts or replaces one exported variable in the managed block.
 func upsertEnvVar(cfg config, key, value string) error {
 	if err := ensureManagedBlock(cfg); err != nil {
 		return err
@@ -68,6 +72,7 @@ func upsertEnvVar(cfg config, key, value string) error {
 	return os.WriteFile(cfg.rcFile, []byte(strings.Join(output, "\n")+"\n"), 0o644)
 }
 
+// ensurePathEntryInRC appends a PATH export when an npm bin path is unmanaged.
 func ensurePathEntryInRC(cfg config, pathEntry string) error {
 	if pathEntry == "" {
 		return nil
@@ -91,6 +96,7 @@ func ensurePathEntryInRC(cfg config, pathEntry string) error {
 	return err
 }
 
+// ensureNVMShellInit appends nvm loading code for future shell sessions.
 func ensureNVMShellInit(cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.rcFile), 0o755); err != nil {
 		return err
@@ -111,6 +117,7 @@ func ensureNVMShellInit(cfg config) error {
 	return err
 }
 
+// installShellWrapper reloads the rc file after successful setup commands.
 func installShellWrapper(cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.rcFile), 0o755); err != nil {
 		return err
@@ -162,6 +169,7 @@ func installShellWrapper(cfg config) error {
 	return nil
 }
 
+// maybeSourceBashrcFromShellProfile links bashrc into zsh/macOS login shells.
 func maybeSourceBashrcFromShellProfile(cfg config) error {
 	shellName := filepath.Base(os.Getenv("SHELL"))
 	sourceLine := `[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"`

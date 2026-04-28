@@ -1,5 +1,7 @@
 package main
 
+// skills.go fetches and installs shared SKILL.md bundles for supported agents.
+
 import (
 	"errors"
 	"fmt"
@@ -8,10 +10,12 @@ import (
 	"sort"
 )
 
+// isExcludedSkill filters out skills Wolfpack must not install.
 func isExcludedSkill(name string) bool {
 	return name == "ultimate-auto" || name == "ultimate-bypass"
 }
 
+// prepareSkillsSource resolves a local, git, or archive source for skills.
 func prepareSkillsSource(cfg config, tmpDir string) (string, error) {
 	if cfg.skillsSource != "" {
 		if stat, err := os.Stat(filepath.Join(cfg.skillsSource, "skills")); err != nil || !stat.IsDir() {
@@ -49,6 +53,7 @@ func prepareSkillsSource(cfg config, tmpDir string) (string, error) {
 	return sourceDir, nil
 }
 
+// listSkills prints installable skill names from the resolved source.
 func listSkills(cfg config) error {
 	if err := assertSupportedOS(); err != nil {
 		return err
@@ -72,6 +77,7 @@ func listSkills(cfg config) error {
 	return nil
 }
 
+// installSkills copies shared skills into Claude, Codex, and OpenCode paths.
 func installSkills(cfg config) error {
 	if err := assertSupportedOS(); err != nil {
 		return err
@@ -94,6 +100,7 @@ func installSkills(cfg config) error {
 	return installSkillsToDir(sourceDir, "OpenCode", cfg.opencodeSkillsDir)
 }
 
+// availableSkills returns sorted skills that contain a SKILL.md and are allowed.
 func availableSkills(sourceDir string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(sourceDir, "skills"))
 	if err != nil {
@@ -112,6 +119,7 @@ func availableSkills(sourceDir string) ([]string, error) {
 	return skills, nil
 }
 
+// installSkillsToDir copies all available skills into one agent destination.
 func installSkillsToDir(sourceDir, targetLabel, targetDir string) error {
 	skills, err := availableSkills(sourceDir)
 	if err != nil {

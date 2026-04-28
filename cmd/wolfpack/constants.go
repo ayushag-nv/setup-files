@@ -1,5 +1,7 @@
 package main
 
+// constants.go keeps shared package names, markers, and default sources.
+
 const (
 	cliName          = "wolfpack"
 	cliVersion       = "0.5.0"

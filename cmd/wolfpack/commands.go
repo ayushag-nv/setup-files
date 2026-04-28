@@ -1,5 +1,7 @@
 package main
 
+// commands.go routes CLI arguments to the installer, diagnostics, and prompts.
+
 import (
 	"bufio"
 	"fmt"
@@ -8,6 +10,7 @@ import (
 	"strings"
 )
 
+// run is the top-level command dispatcher for non-interactive CLI usage.
 func run(cfg config, args []string) error {
 	if len(args) == 0 {
 		return interactiveMenu(cfg)
@@ -58,6 +61,7 @@ func run(cfg config, args []string) error {
 	}
 }
 
+// usage prints the user-facing command reference.
 func usage() {
 	fmt.Print(`wolfpack
 
@@ -87,6 +91,7 @@ Environment:
 `)
 }
 
+// normalizeTarget maps aliases like "code" to the internal install target.
 func normalizeTarget(target string) (string, error) {
 	switch target {
 	case "", "all":
@@ -104,6 +109,7 @@ func normalizeTarget(target string) (string, error) {
 	}
 }
 
+// assertSupportedOS rejects platforms outside the macOS/Linux support scope.
 func assertSupportedOS() error {
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 		return nil
@@ -111,6 +117,7 @@ func assertSupportedOS() error {
 	return fmt.Errorf("unsupported OS: %s. This CLI supports macOS and Linux", runtime.GOOS)
 }
 
+// interactiveMenu provides the no-argument terminal menu.
 func interactiveMenu(cfg config) error {
 	if !stdinIsTTY() {
 		return installTarget(cfg, "all")

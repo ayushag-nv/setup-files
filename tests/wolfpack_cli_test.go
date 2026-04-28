@@ -1,5 +1,7 @@
 package tests
 
+// wolfpack_cli_test.go exercises the built CLI through go run.
+
 import (
 	"os"
 	"os/exec"
@@ -10,6 +12,7 @@ import (
 	"testing"
 )
 
+// runWolfpack executes the source CLI with optional environment overrides.
 func runWolfpack(t *testing.T, env []string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(goBinary(t), append([]string{"run", "../cmd/wolfpack"}, args...)...)
@@ -21,6 +24,7 @@ func runWolfpack(t *testing.T, env []string, args ...string) string {
 	return string(out)
 }
 
+// goBinary returns the Go executable that is running the test process.
 func goBinary(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(runtime.GOROOT(), "bin", "go")
@@ -30,6 +34,7 @@ func goBinary(t *testing.T) string {
 	return path
 }
 
+// TestHelpMentionsOpenCode guards the user-facing OpenCode command surface.
 func TestHelpMentionsOpenCode(t *testing.T) {
 	out := runWolfpack(t, nil, "help")
 	for _, want := range []string{
@@ -44,6 +49,7 @@ func TestHelpMentionsOpenCode(t *testing.T) {
 	}
 }
 
+// TestVersionOutput keeps the CLI version output script-friendly.
 func TestVersionOutput(t *testing.T) {
 	out := runWolfpack(t, nil, "--version")
 	if !regexp.MustCompile(`^wolfpack \d+\.\d+\.\d+\n$`).MatchString(out) {
@@ -51,6 +57,7 @@ func TestVersionOutput(t *testing.T) {
 	}
 }
 
+// TestSkillsInstallIncludesOpenCodeDestination verifies all agent skill paths.
 func TestSkillsInstallIncludesOpenCodeDestination(t *testing.T) {
 	tmp := t.TempDir()
 	source := filepath.Join(tmp, "source")
@@ -84,6 +91,7 @@ func TestSkillsInstallIncludesOpenCodeDestination(t *testing.T) {
 	}
 }
 
+// writeSkill creates a minimal skill fixture for install tests.
 func writeSkill(t *testing.T, skillsDir, name string) {
 	t.Helper()
 	dir := filepath.Join(skillsDir, name)

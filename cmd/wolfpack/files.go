@@ -1,5 +1,7 @@
 package main
 
+// files.go contains filesystem helpers used by skills and archive installs.
+
 import (
 	"archive/tar"
 	"compress/gzip"
@@ -11,6 +13,7 @@ import (
 	"strings"
 )
 
+// canWriteDir checks whether a directory accepts a temporary file.
 func canWriteDir(dir string) bool {
 	tmp, err := os.CreateTemp(dir, ".wolfpack-*")
 	if err != nil {
@@ -21,6 +24,7 @@ func canWriteDir(dir string) bool {
 	return true
 }
 
+// copyTree recursively copies files, directories, and symlinks.
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -50,6 +54,7 @@ func copyTree(src, dst string) error {
 	})
 }
 
+// copyFile copies one file with the requested permissions.
 func copyFile(src, dst string, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -70,6 +75,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return out.Close()
 }
 
+// extractTarGZStripFirstComponent unpacks GitHub-style archives into destDir.
 func extractTarGZStripFirstComponent(archivePath, destDir string) error {
 	file, err := os.Open(archivePath)
 	if err != nil {

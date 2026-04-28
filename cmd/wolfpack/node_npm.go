@@ -1,5 +1,7 @@
 package main
 
+// node_npm.go installs Node.js/npm and discovers npm package versions.
+
 import (
 	"encoding/json"
 	"errors"
@@ -13,11 +15,13 @@ import (
 	"strings"
 )
 
+// npmMetadata is the subset of npm registry metadata Wolfpack needs.
 type npmMetadata struct {
 	DistTags map[string]string          `json:"dist-tags"`
 	Versions map[string]json.RawMessage `json:"versions"`
 }
 
+// semver stores parsed semantic-version components for sorting.
 type semver struct {
 	major      int
 	minor      int
@@ -30,6 +34,7 @@ var (
 	stablePattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
+// installNPMTool installs one selected npm package globally and verifies its binary.
 func installNPMTool(cfg config, label, packageName, binaryName string) error {
 	if err := assertSupportedOS(); err != nil {
 		return err
@@ -71,6 +76,7 @@ func installNPMTool(cfg config, label, packageName, binaryName string) error {
 	return nil
 }
 
+// ensureNode ensures usable Node.js and npm are available without sudo npm.
 func ensureNode(cfg config) error {
 	if commandExistsWithNVM(cfg, "node") && commandExistsWithNVM(cfg, "npm") {
 		major, err := nodeMajor(cfg)
@@ -98,6 +104,7 @@ func ensureNode(cfg config) error {
 	return nil
 }
 
+// installNVMAndNode installs nvm if needed, then installs latest Node LTS.
 func installNVMAndNode(cfg config) error {
 	if !commandExistsWithNVM(cfg, "nvm") {
 		version := os.Getenv("NVM_VERSION")
@@ -136,6 +143,7 @@ func installNVMAndNode(cfg config) error {
 	return ensureNVMShellInit(cfg)
 }
 
+// latestNVMVersion fetches the latest nvm release tag from GitHub.
 func latestNVMVersion() (string, error) {
 	resp, err := http.Get("https://api.github.com/repos/nvm-sh/nvm/releases/latest")
 	if err != nil {
@@ -154,6 +162,7 @@ func latestNVMVersion() (string, error) {
 	return payload.TagName, nil
 }
 
+// nodeMajor returns the current Node.js major version after loading nvm.
 func nodeMajor(cfg config) (int, error) {
 	out, err := captureShellWithNVM(cfg, "node -p \"process.versions.node.split('.')[0]\"")
 	if err != nil {
@@ -162,6 +171,7 @@ func nodeMajor(cfg config) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(out))
 }
 
+// npmGlobalPrefix returns the npm global install prefix.
 func npmGlobalPrefix(cfg config) (string, error) {
 	out, err := captureShellWithNVM(cfg, "npm config get prefix")
 	if err != nil {
@@ -170,6 +180,7 @@ func npmGlobalPrefix(cfg config) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// npmGlobalPrefixWritable reports whether global npm installs can write there.
 func npmGlobalPrefixWritable(cfg config) bool {
 	prefix, err := npmGlobalPrefix(cfg)
 	if err != nil || prefix == "" {
@@ -186,6 +197,7 @@ func npmGlobalPrefixWritable(cfg config) bool {
 	return canWriteDir(parent)
 }
 
+// ensureNPMCLIPath makes globally installed npm binaries discoverable later.
 func ensureNPMCLIPath(cfg config) error {
 	if !commandExistsWithNVM(cfg, "npm") {
 		return nil
@@ -201,6 +213,7 @@ func ensureNPMCLIPath(cfg config) error {
 	return ensurePathEntryInRC(cfg, binDir)
 }
 
+// npmVersionsForPackage fetches latest and recent semver versions from npm.
 func npmVersionsForPackage(packageName string, limit int) (string, []string, error) {
 	url := "https://registry.npmjs.org/" + strings.ReplaceAll(packageName, "/", "%2F")
 	resp, err := http.Get(url)
@@ -244,6 +257,7 @@ func npmVersionsForPackage(packageName string, limit int) (string, []string, err
 	return latest, versions, nil
 }
 
+// parseSemver parses a version string accepted by Wolfpack's version chooser.
 func parseSemver(version string) *semver {
 	match := semverPattern.FindStringSubmatch(version)
 	if match == nil {
@@ -255,6 +269,7 @@ func parseSemver(version string) *semver {
 	return &semver{major: major, minor: minor, patch: patch, prerelease: match[4]}
 }
 
+// compareSemver orders semantic versions from oldest to newest.
 func compareSemver(a, b string) int {
 	pa := parseSemver(a)
 	pb := parseSemver(b)
@@ -288,6 +303,7 @@ func compareSemver(a, b string) int {
 	return strings.Compare(pa.prerelease, pb.prerelease)
 }
 
+// choosePackageVersion prompts for an npm package version or defaults to latest.
 func choosePackageVersion(cfg config, label, packageName string) (string, error) {
 	fmt.Fprintf(os.Stderr, "Fetching available %s versions from npm registry.\n", label)
 	latest, versions, err := npmVersionsForPackage(packageName, cfg.versionLimit)
@@ -328,6 +344,7 @@ func choosePackageVersion(cfg config, label, packageName string) (string, error)
 	}
 }
 
+// listVersions prints recent npm versions for one target or all npm targets.
 func listVersions(cfg config, target string) error {
 	normalized, err := normalizeTarget(target)
 	if err != nil {

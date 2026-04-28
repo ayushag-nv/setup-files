@@ -1,5 +1,7 @@
 package main
 
+// prompt.go handles interactive input, yes/no prompts, and secret entry.
+
 import (
 	"bufio"
 	"fmt"
@@ -8,10 +10,12 @@ import (
 	"strings"
 )
 
+// newInputReader creates a stdin reader for one prompt sequence.
 func newInputReader() *bufio.Reader {
 	return bufio.NewReader(os.Stdin)
 }
 
+// promptLine reads one line, showing a prompt only for interactive terminals.
 func promptLine(prompt string) string {
 	if stdinIsTTY() {
 		fmt.Fprint(os.Stderr, prompt)
@@ -21,6 +25,7 @@ func promptLine(prompt string) string {
 	return strings.TrimRight(value, "\r\n")
 }
 
+// promptSecret reads a sensitive value with terminal echo disabled when possible.
 func promptSecret(prompt string) string {
 	if !stdinIsTTY() {
 		return promptLine("")
@@ -38,6 +43,7 @@ func promptSecret(prompt string) string {
 	return strings.TrimRight(value, "\r\n")
 }
 
+// promptYesNo asks a yes/no question and uses the default in non-TTY mode.
 func promptYesNo(prompt string, defaultYes bool) bool {
 	if !stdinIsTTY() {
 		return defaultYes

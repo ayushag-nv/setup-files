@@ -1,5 +1,7 @@
 package main
 
+// config.go loads all paths and tunables from environment variables.
+
 import (
 	"fmt"
 	"os"
@@ -7,6 +9,7 @@ import (
 	"strconv"
 )
 
+// config carries resolved runtime settings used across the CLI.
 type config struct {
 	home              string
 	rcFile            string
@@ -21,6 +24,7 @@ type config struct {
 	nvmDir            string
 }
 
+// loadConfig resolves defaults for rc files, skills sources, and install paths.
 func loadConfig() config {
 	home, _ := os.UserHomeDir()
 	versionLimit := 20
@@ -53,6 +57,7 @@ func loadConfig() config {
 	}
 }
 
+// envDefault returns an environment value when set, otherwise the fallback.
 func envDefault(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
