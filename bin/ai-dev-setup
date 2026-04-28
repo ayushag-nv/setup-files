@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 CLI_NAME="ai-dev-setup"
-CLI_VERSION="0.1.0"
+CLI_VERSION="0.1.1"
 
 CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 CODEX_PACKAGE="@openai/codex"
@@ -136,6 +136,79 @@ load_nvm() {
   fi
 }
 
+ensure_path_entry_in_rc() {
+  local path_entry="$1"
+  local rc_file="${2:-$RC_FILE}"
+  local rc_dir line
+
+  [ -n "$path_entry" ] || return
+  rc_dir="$(dirname "$rc_file")"
+  mkdir -p "$rc_dir"
+  touch "$rc_file"
+
+  if grep -Fq "$path_entry" "$rc_file"; then
+    return
+  fi
+
+  line="export PATH=\"$path_entry:\$PATH\""
+  {
+    printf '\n# ai-dev-setup: add npm global CLIs to PATH\n'
+    printf '%s\n' "$line"
+  } >>"$rc_file"
+  log "Updated $rc_file to add $path_entry to PATH."
+}
+
+ensure_nvm_shell_init() {
+  local rc_file="${1:-$RC_FILE}"
+  local rc_dir
+
+  rc_dir="$(dirname "$rc_file")"
+  mkdir -p "$rc_dir"
+  touch "$rc_file"
+
+  if grep -Fq 'nvm.sh' "$rc_file"; then
+    return
+  fi
+
+  {
+    printf '\n# ai-dev-setup: load nvm for Node.js CLIs\n'
+    printf 'export NVM_DIR="$HOME/.nvm"\n'
+    printf '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"\n'
+  } >>"$rc_file"
+  log "Updated $rc_file to load nvm for future shells."
+}
+
+npm_global_bin_dir() {
+  local prefix
+
+  prefix="$(npm config get prefix 2>/dev/null || true)"
+  [ -n "$prefix" ] || return 1
+  printf '%s/bin\n' "$prefix"
+}
+
+ensure_npm_cli_path() {
+  local bin_dir
+  local nvm_root="${NVM_DIR:-$HOME/.nvm}"
+
+  have_cmd npm || return
+  bin_dir="$(npm_global_bin_dir || true)"
+  [ -n "$bin_dir" ] || return
+
+  case ":$PATH:" in
+    *":$bin_dir:"*) ;;
+    *) export PATH="$bin_dir:$PATH" ;;
+  esac
+
+  case "$bin_dir" in
+    "$nvm_root/"*)
+      ensure_nvm_shell_init "$RC_FILE"
+      ;;
+    *)
+      ensure_path_entry_in_rc "$bin_dir" "$RC_FILE"
+      ;;
+  esac
+}
+
 latest_nvm_version() {
   fetch_url "https://api.github.com/repos/nvm-sh/nvm/releases/latest" |
     sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
@@ -164,6 +237,7 @@ install_nvm_and_node() {
   nvm install --lts
   nvm alias default 'lts/*' >/dev/null
   nvm use --lts >/dev/null
+  ensure_nvm_shell_init "$RC_FILE"
 }
 
 npm_global_prefix_writable() {
@@ -357,12 +431,14 @@ install_npm_tool() {
 
   assert_supported_os
   ensure_node
+  ensure_npm_cli_path
 
   version="$(choose_package_version "$label" "$package_name")"
   package_spec="$package_name@$version"
 
   log "Installing $label with npm package $package_spec."
   npm install -g "$package_spec"
+  ensure_npm_cli_path
 
   if have_cmd "$binary_name"; then
     log "$label installed:"
@@ -370,6 +446,9 @@ install_npm_tool() {
   else
     warn "$label install completed, but '$binary_name' is not on PATH in this shell"
   fi
+
+  maybe_source_bashrc_from_shell_profile
+  log "Reload your shell with: source $RC_FILE"
 }
 
 install_claude() {
@@ -602,6 +681,7 @@ doctor() {
   local node_version npm_version prefix
 
   assert_supported_os
+  load_nvm
   log "OS: $(uname -s) $(uname -m)"
 
   show_doctor_line "curl or wget" sh -c 'command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1'
@@ -643,7 +723,10 @@ ensure_deps() {
   assert_supported_os
   ensure_fetcher
   ensure_node
+  ensure_npm_cli_path
+  maybe_source_bashrc_from_shell_profile
   log "Dependencies are ready."
+  log "Reload your shell with: source $RC_FILE"
 }
 
 interactive_menu() {

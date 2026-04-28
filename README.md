@@ -67,6 +67,16 @@ Check the local setup:
 ai-dev-setup doctor
 ```
 
+## Troubleshooting
+
+If an install reports success but the command is not available in your shell, reload your shell startup file:
+
+```bash
+source ~/.bashrc
+```
+
+`ai-dev-setup deps` and `ai-dev-setup install ...` also make sure `~/.bashrc` loads `nvm` or includes the npm global `bin` path for future shells.
+
 ## Notes
 
 - Claude Code requires Node.js 18 or newer.
