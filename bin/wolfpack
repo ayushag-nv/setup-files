@@ -4,15 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if command -v go >/dev/null 2>&1; then
-  exec go run "$ROOT/cmd/ai-dev-setup" "$@"
+  exec go run "$ROOT/cmd/wolfpack" "$@"
 fi
 
-if [ -x /tmp/ai-dev-setup-go/go/bin/go ]; then
-  exec /tmp/ai-dev-setup-go/go/bin/go run "$ROOT/cmd/ai-dev-setup" "$@"
+if [ -x /tmp/wolfpack-go/go/bin/go ]; then
+  exec /tmp/wolfpack-go/go/bin/go run "$ROOT/cmd/wolfpack" "$@"
 fi
 
 cat >&2 <<'EOF'
-error: Go is required to run ai-dev-setup from the source checkout.
+error: Go is required to run wolfpack from the source checkout.
 
 Run ./install.sh to build and install the standalone CLI. The installer can
 download a temporary Go toolchain when Go is not already installed.

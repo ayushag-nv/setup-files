@@ -15,7 +15,7 @@ func isExcludedSkill(name string) bool {
 func prepareSkillsSource(cfg config, tmpDir string) (string, error) {
 	if cfg.skillsSource != "" {
 		if stat, err := os.Stat(filepath.Join(cfg.skillsSource, "skills")); err != nil || !stat.IsDir() {
-			return "", fmt.Errorf("AI_SETUP_SKILLS_SOURCE must contain a skills/ directory: %s", cfg.skillsSource)
+			return "", fmt.Errorf("WOLFPACK_SKILLS_SOURCE must contain a skills/ directory: %s", cfg.skillsSource)
 		}
 		return cfg.skillsSource, nil
 	}
@@ -53,7 +53,7 @@ func listSkills(cfg config) error {
 	if err := assertSupportedOS(); err != nil {
 		return err
 	}
-	tmpDir, err := os.MkdirTemp("", "ai-dev-setup-skills-*")
+	tmpDir, err := os.MkdirTemp("", "wolfpack-skills-*")
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func installSkills(cfg config) error {
 	if err := assertSupportedOS(); err != nil {
 		return err
 	}
-	tmpDir, err := os.MkdirTemp("", "ai-dev-setup-skills-*")
+	tmpDir, err := os.MkdirTemp("", "wolfpack-skills-*")
 	if err != nil {
 		return err
 	}

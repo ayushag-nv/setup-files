@@ -59,27 +59,27 @@ func run(cfg config, args []string) error {
 }
 
 func usage() {
-	fmt.Print(`ai-dev-setup
+	fmt.Print(`wolfpack
 
 Usage:
-  ai-dev-setup install [all|claude|codex|code|skills]
-  ai-dev-setup versions [claude|codex|code]
-  ai-dev-setup skills [install|list]
-  ai-dev-setup keys
-  ai-dev-setup deps
-  ai-dev-setup doctor
-  ai-dev-setup help
+  wolfpack install [all|claude|codex|code|skills]
+  wolfpack versions [claude|codex|code]
+  wolfpack skills [install|list]
+  wolfpack keys
+  wolfpack deps
+  wolfpack doctor
+  wolfpack help
 
 Defaults:
   install all     Installs Claude Code, Codex CLI, skills, and prompts for API keys.
   codex/code      Both target the OpenAI Codex CLI npm package.
 
 Environment:
-  AI_SETUP_RC               Shell rc file for exported API keys (default: ~/.bashrc)
-  AI_SETUP_VERSION_LIMIT    Number of npm versions to show (default: 20)
-  AI_SETUP_SKILLS_REPO      ai-skills git repository URL
-  AI_SETUP_SKILLS_REF       ai-skills branch/ref to install (default: main)
-  AI_SETUP_SKILLS_SOURCE    Local ai-skills checkout to install from instead of fetching
+  WOLFPACK_RC               Shell rc file for exported API keys (default: ~/.bashrc)
+  WOLFPACK_VERSION_LIMIT    Number of npm versions to show (default: 20)
+  WOLFPACK_SKILLS_REPO      ai-skills git repository URL
+  WOLFPACK_SKILLS_REF       ai-skills branch/ref to install (default: main)
+  WOLFPACK_SKILLS_SOURCE    Local ai-skills checkout to install from instead of fetching
   CLAUDE_SKILLS_DIR         Claude Code skills destination (default: ~/.claude/skills)
   CODEX_SKILLS_DIR          Codex skills destination (default: ${CODEX_HOME:-~/.codex}/skills)
   NVM_VERSION               nvm release tag override, such as v0.40.3
@@ -115,7 +115,7 @@ func interactiveMenu(cfg config) error {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Fprint(os.Stderr, `
-ai-dev-setup
+wolfpack
   1) Install everything
   2) Install Claude Code
   3) Install OpenAI Codex CLI

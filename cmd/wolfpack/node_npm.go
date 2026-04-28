@@ -113,7 +113,7 @@ func installNVMAndNode(cfg config) error {
 		}
 
 		fmt.Printf("Installing nvm %s.\n", version)
-		tmp, err := os.CreateTemp("", "ai-dev-setup-nvm-*.sh")
+		tmp, err := os.CreateTemp("", "wolfpack-nvm-*.sh")
 		if err != nil {
 			return err
 		}

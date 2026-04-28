@@ -7,7 +7,7 @@ BOOTSTRAP_GO_VERSION="${BOOTSTRAP_GO_VERSION:-1.25.0}"
 
 usage() {
   cat <<'EOF'
-Install ai-dev-setup.
+Install wolfpack.
 
 Usage:
   ./install.sh [--no-deps]
@@ -35,7 +35,7 @@ case "${1:-}" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="$INSTALL_DIR/ai-dev-setup"
+TARGET="$INSTALL_DIR/wolfpack"
 TMP_GO_DIR=""
 
 have_cmd() {
@@ -86,7 +86,7 @@ bootstrap_go() {
       ;;
   esac
 
-  TMP_GO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ai-dev-setup-go.XXXXXX")"
+  TMP_GO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wolfpack-go.XXXXXX")"
   archive="$TMP_GO_DIR/go.tar.gz"
   url="https://go.dev/dl/go${BOOTSTRAP_GO_VERSION}.${os}-${arch}.tar.gz"
 
@@ -106,7 +106,7 @@ trap cleanup EXIT
 GO_BIN="$(bootstrap_go)"
 
 mkdir -p "$INSTALL_DIR"
-"$GO_BIN" build -trimpath -ldflags "-s -w" -o "$TARGET" "$SCRIPT_DIR/cmd/ai-dev-setup"
+"$GO_BIN" build -trimpath -ldflags "-s -w" -o "$TARGET" "$SCRIPT_DIR/cmd/wolfpack"
 chmod +x "$TARGET"
 
 case ":$PATH:" in

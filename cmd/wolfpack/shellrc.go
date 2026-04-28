@@ -84,7 +84,7 @@ func ensurePathEntryInRC(cfg config, pathEntry string) error {
 		return err
 	}
 	defer f.Close()
-	_, err = fmt.Fprintf(f, "\n# ai-dev-setup: add npm global CLIs to PATH\nexport PATH=\"%s:$PATH\"\n", pathEntry)
+	_, err = fmt.Fprintf(f, "\n# wolfpack: add npm global CLIs to PATH\nexport PATH=\"%s:$PATH\"\n", pathEntry)
 	if err == nil {
 		fmt.Printf("Updated %s to add %s to PATH.\n", cfg.rcFile, pathEntry)
 	}
@@ -104,7 +104,7 @@ func ensureNVMShellInit(cfg config) error {
 		return err
 	}
 	defer f.Close()
-	_, err = fmt.Fprint(f, "\n# ai-dev-setup: load nvm for Node.js CLIs\nexport NVM_DIR=\"$HOME/.nvm\"\n[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"\n")
+	_, err = fmt.Fprint(f, "\n# wolfpack: load nvm for Node.js CLIs\nexport NVM_DIR=\"$HOME/.nvm\"\n[ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"\n")
 	if err == nil {
 		fmt.Printf("Updated %s to load nvm for future shells.\n", cfg.rcFile)
 	}
@@ -140,8 +140,8 @@ func installShellWrapper(cfg config) error {
 	}
 	block := []string{
 		wrapperBegin,
-		"ai-dev-setup() {",
-		"  command ai-dev-setup \"$@\"",
+		"wolfpack() {",
+		"  command wolfpack \"$@\"",
 		"  local status=$?",
 		"  case \"${1:-}\" in",
 		"    install|deps|keys)",
@@ -158,7 +158,7 @@ func installShellWrapper(cfg config) error {
 	if err := os.WriteFile(cfg.rcFile, []byte(strings.Join(output, "\n")+"\n"), 0o644); err != nil {
 		return err
 	}
-	fmt.Printf("Updated %s so ai-dev-setup refreshes this shell after setup commands.\n", cfg.rcFile)
+	fmt.Printf("Updated %s so wolfpack refreshes this shell after setup commands.\n", cfg.rcFile)
 	return nil
 }
 

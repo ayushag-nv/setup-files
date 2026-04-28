@@ -23,28 +23,28 @@ type config struct {
 func loadConfig() config {
 	home, _ := os.UserHomeDir()
 	versionLimit := 20
-	if raw := os.Getenv("AI_SETUP_VERSION_LIMIT"); raw != "" {
+	if raw := os.Getenv("WOLFPACK_VERSION_LIMIT"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			versionLimit = parsed
 		}
 	}
 
-	skillsRef := envDefault("AI_SETUP_SKILLS_REF", defaultSkillsRef)
+	skillsRef := envDefault("WOLFPACK_SKILLS_REF", defaultSkillsRef)
 	nvmDir := envDefault("NVM_DIR", filepath.Join(home, ".nvm"))
 	codexHome := envDefault("CODEX_HOME", filepath.Join(home, ".codex"))
-	archiveURL := os.Getenv("AI_SETUP_SKILLS_ARCHIVE_URL")
+	archiveURL := os.Getenv("WOLFPACK_SKILLS_ARCHIVE_URL")
 	if archiveURL == "" {
 		archiveURL = fmt.Sprintf("https://github.com/ayushag-nv/ai-skills/archive/refs/heads/%s.tar.gz", skillsRef)
 	}
 
 	return config{
 		home:             home,
-		rcFile:           envDefault("AI_SETUP_RC", filepath.Join(home, ".bashrc")),
+		rcFile:           envDefault("WOLFPACK_RC", filepath.Join(home, ".bashrc")),
 		versionLimit:     versionLimit,
 		skillsRef:        skillsRef,
-		skillsRepo:       envDefault("AI_SETUP_SKILLS_REPO", defaultSkillsGit),
+		skillsRepo:       envDefault("WOLFPACK_SKILLS_REPO", defaultSkillsGit),
 		skillsArchiveURL: archiveURL,
-		skillsSource:     os.Getenv("AI_SETUP_SKILLS_SOURCE"),
+		skillsSource:     os.Getenv("WOLFPACK_SKILLS_SOURCE"),
 		claudeSkillsDir:  envDefault("CLAUDE_SKILLS_DIR", filepath.Join(home, ".claude", "skills")),
 		codexSkillsDir:   envDefault("CODEX_SKILLS_DIR", filepath.Join(codexHome, "skills")),
 		nvmDir:           nvmDir,

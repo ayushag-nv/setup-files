@@ -12,7 +12,7 @@ import (
 )
 
 func canWriteDir(dir string) bool {
-	tmp, err := os.CreateTemp(dir, ".ai-dev-setup-*")
+	tmp, err := os.CreateTemp(dir, ".wolfpack-*")
 	if err != nil {
 		return false
 	}
