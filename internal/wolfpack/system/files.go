@@ -1,9 +1,10 @@
-package main
+package system
 
 // files.go contains filesystem helpers used by skills and archive installs.
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -13,8 +14,8 @@ import (
 	"strings"
 )
 
-// canWriteDir checks whether a directory accepts a temporary file.
-func canWriteDir(dir string) bool {
+// CanWriteDir checks whether a directory accepts a temporary file.
+func CanWriteDir(dir string) bool {
 	tmp, err := os.CreateTemp(dir, ".wolfpack-*")
 	if err != nil {
 		return false
@@ -24,8 +25,8 @@ func canWriteDir(dir string) bool {
 	return true
 }
 
-// copyTree recursively copies files, directories, and symlinks.
-func copyTree(src, dst string) error {
+// CopyTree recursively copies files, directories, and symlinks.
+func CopyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -75,8 +76,8 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return out.Close()
 }
 
-// extractTarGZStripFirstComponent unpacks GitHub-style archives into destDir.
-func extractTarGZStripFirstComponent(archivePath, destDir string) error {
+// ExtractTarGZStripFirstComponent unpacks GitHub-style archives into destDir.
+func ExtractTarGZStripFirstComponent(archivePath, destDir string) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return err
@@ -139,4 +140,81 @@ func extractTarGZStripFirstComponent(archivePath, destDir string) error {
 			}
 		}
 	}
+}
+
+// ExtractFileFromTarGZ copies one archive member matching suffix to destPath.
+func ExtractFileFromTarGZ(archivePath, memberSuffix, destPath string) error {
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	gz, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return fmt.Errorf("archive member not found: %s", memberSuffix)
+		}
+		if err != nil {
+			return err
+		}
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+			continue
+		}
+		if header.Name != memberSuffix && !strings.HasSuffix(header.Name, "/"+memberSuffix) {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(header.Mode).Perm())
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			return err
+		}
+		return out.Close()
+	}
+}
+
+// ExtractFileFromZip copies one zip member matching suffix to destPath.
+func ExtractFileFromZip(archivePath, memberSuffix, destPath string) error {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		if file.Name != memberSuffix && !strings.HasSuffix(file.Name, "/"+memberSuffix) {
+			continue
+		}
+		in, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, file.Mode().Perm())
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, in); err != nil {
+			out.Close()
+			return err
+		}
+		return out.Close()
+	}
+	return fmt.Errorf("archive member not found: %s", memberSuffix)
 }

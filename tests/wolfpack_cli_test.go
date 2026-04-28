@@ -34,13 +34,14 @@ func goBinary(t *testing.T) string {
 	return path
 }
 
-// TestHelpMentionsOpenCode guards the user-facing OpenCode command surface.
-func TestHelpMentionsOpenCode(t *testing.T) {
+// TestHelpMentionsSupportedTools guards the user-facing command surface.
+func TestHelpMentionsSupportedTools(t *testing.T) {
 	out := runWolfpack(t, nil, "help")
 	for _, want := range []string{
-		"wolfpack install [all|claude|codex|code|opencode|skills]",
-		"wolfpack versions [claude|codex|code|opencode]",
+		"wolfpack install [all|claude|codex|code|opencode|uv|ruff|gh|glab|skills]",
+		"wolfpack versions [claude|codex|code|opencode|uv|ruff|gh|glab]",
 		"OpenCode",
+		"WOLFPACK_BIN_DIR",
 		"OPENCODE_SKILLS_DIR",
 	} {
 		if !strings.Contains(out, want) {

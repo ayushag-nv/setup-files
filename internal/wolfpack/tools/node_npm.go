@@ -1,6 +1,6 @@
-package main
+package tools
 
-// node_npm.go installs Node.js/npm and discovers npm package versions.
+// Package tools installs developer CLIs and discovers available versions.
 
 import (
 	"encoding/json"
@@ -13,7 +13,51 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ayushag-nv/wolfpack/internal/wolfpack/config"
+	"github.com/ayushag-nv/wolfpack/internal/wolfpack/system"
 )
+
+const (
+	claudePackage   = "@anthropic-ai/claude-code"
+	codexPackage    = "@openai/codex"
+	opencodePackage = "opencode-ai"
+	minNodeMajor    = 18
+)
+
+// NPMTool describes one global npm package and the command it should expose.
+type NPMTool struct {
+	Target      string
+	Label       string
+	PackageName string
+	BinaryName  string
+}
+
+// NPMTools is the list of AI coding CLIs Wolfpack installs through npm.
+var NPMTools = []NPMTool{
+	{Target: "claude", Label: "Claude Code", PackageName: claudePackage, BinaryName: "claude"},
+	{Target: "codex", Label: "OpenAI Codex CLI", PackageName: codexPackage, BinaryName: "codex"},
+	{Target: "opencode", Label: "OpenCode CLI", PackageName: opencodePackage, BinaryName: "opencode"},
+}
+
+// NPMToolByTarget returns metadata for a normalized npm-backed install target.
+func NPMToolByTarget(target string) (NPMTool, bool) {
+	for _, tool := range NPMTools {
+		if tool.Target == target {
+			return tool, true
+		}
+	}
+	return NPMTool{}, false
+}
+
+// InstallNPMTarget installs a normalized npm-backed Wolfpack target.
+func InstallNPMTarget(cfg config.Config, target string) error {
+	tool, ok := NPMToolByTarget(target)
+	if !ok {
+		return fmt.Errorf("unknown npm target: %s", target)
+	}
+	return InstallNPMTool(cfg, tool.Label, tool.PackageName, tool.BinaryName)
+}
 
 // npmMetadata is the subset of npm registry metadata Wolfpack needs.
 type npmMetadata struct {
@@ -34,15 +78,15 @@ var (
 	stablePattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 )
 
-// installNPMTool installs one selected npm package globally and verifies its binary.
-func installNPMTool(cfg config, label, packageName, binaryName string) error {
-	if err := assertSupportedOS(); err != nil {
+// InstallNPMTool installs one selected npm package globally and verifies its binary.
+func InstallNPMTool(cfg config.Config, label, packageName, binaryName string) error {
+	if err := system.AssertSupportedOS(); err != nil {
 		return err
 	}
-	if err := ensureNode(cfg); err != nil {
+	if err := EnsureNode(cfg); err != nil {
 		return err
 	}
-	if err := ensureNPMCLIPath(cfg); err != nil {
+	if err := EnsureNPMCLIPath(cfg); err != nil {
 		return err
 	}
 
@@ -52,41 +96,41 @@ func installNPMTool(cfg config, label, packageName, binaryName string) error {
 	}
 	spec := packageName + "@" + version
 	fmt.Printf("Installing %s with npm package %s.\n", label, spec)
-	if err := runShellWithNVM(cfg, "npm install -g "+shellQuote(spec)); err != nil {
+	if err := system.RunShellWithNVM(cfg, "npm install -g "+system.ShellQuote(spec)); err != nil {
 		return err
 	}
-	if err := ensureNPMCLIPath(cfg); err != nil {
+	if err := EnsureNPMCLIPath(cfg); err != nil {
 		return err
 	}
 
-	if commandExistsWithNVM(cfg, binaryName) {
+	if system.CommandExistsWithNVM(cfg, binaryName) {
 		fmt.Printf("%s installed:\n", label)
-		_ = runShellWithNVM(cfg, binaryName+" --version")
+		_ = system.RunShellWithNVM(cfg, binaryName+" --version")
 	} else {
-		warn("%s install completed, but %q is not on PATH in this shell", label, binaryName)
+		system.Warn("%s install completed, but %q is not on PATH in this shell", label, binaryName)
 	}
 
-	if err := installShellWrapper(cfg); err != nil {
+	if err := system.InstallShellWrapper(cfg); err != nil {
 		return err
 	}
-	if err := maybeSourceBashrcFromShellProfile(cfg); err != nil {
+	if err := system.MaybeSourceBashrcFromShellProfile(cfg); err != nil {
 		return err
 	}
-	fmt.Printf("For this terminal, run once: source %s\n", cfg.rcFile)
+	fmt.Printf("For this terminal, run once: source %s\n", cfg.RCFile)
 	return nil
 }
 
-// ensureNode ensures usable Node.js and npm are available without sudo npm.
-func ensureNode(cfg config) error {
-	if commandExistsWithNVM(cfg, "node") && commandExistsWithNVM(cfg, "npm") {
+// EnsureNode ensures usable Node.js and npm are available without sudo npm.
+func EnsureNode(cfg config.Config) error {
+	if system.CommandExistsWithNVM(cfg, "node") && system.CommandExistsWithNVM(cfg, "npm") {
 		major, err := nodeMajor(cfg)
 		if err == nil && major >= minNodeMajor && npmGlobalPrefixWritable(cfg) {
 			return nil
 		}
 		if err == nil && major < minNodeMajor {
-			warn("Node.js %d+ is required; current major is %d", minNodeMajor, major)
+			system.Warn("Node.js %d+ is required; current major is %d", minNodeMajor, major)
 		} else if !npmGlobalPrefixWritable(cfg) {
-			warn("npm global prefix is not writable; installing user-local Node.js through nvm")
+			system.Warn("npm global prefix is not writable; installing user-local Node.js through nvm")
 		}
 	} else {
 		fmt.Println("Node.js and npm are required; installing them through nvm.")
@@ -95,18 +139,18 @@ func ensureNode(cfg config) error {
 	if err := installNVMAndNode(cfg); err != nil {
 		return err
 	}
-	if !commandExistsWithNVM(cfg, "node") {
+	if !system.CommandExistsWithNVM(cfg, "node") {
 		return errors.New("node was not found after installation")
 	}
-	if !commandExistsWithNVM(cfg, "npm") {
+	if !system.CommandExistsWithNVM(cfg, "npm") {
 		return errors.New("npm was not found after installation")
 	}
 	return nil
 }
 
 // installNVMAndNode installs nvm if needed, then installs latest Node LTS.
-func installNVMAndNode(cfg config) error {
-	if !commandExistsWithNVM(cfg, "nvm") {
+func installNVMAndNode(cfg config.Config) error {
+	if !system.CommandExistsWithNVM(cfg, "nvm") {
 		version := os.Getenv("NVM_VERSION")
 		if version == "" {
 			latest, err := latestNVMVersion()
@@ -116,7 +160,7 @@ func installNVMAndNode(cfg config) error {
 		}
 		if version == "" {
 			version = "v0.40.3"
-			warn("could not detect latest nvm release; falling back to %s", version)
+			system.Warn("could not detect latest nvm release; falling back to %s", version)
 		}
 
 		fmt.Printf("Installing nvm %s.\n", version)
@@ -128,19 +172,19 @@ func installNVMAndNode(cfg config) error {
 		defer os.Remove(tmp.Name())
 
 		url := fmt.Sprintf("https://raw.githubusercontent.com/nvm-sh/nvm/%s/install.sh", version)
-		if err := downloadFile(url, tmp.Name()); err != nil {
+		if err := system.DownloadFile(url, tmp.Name()); err != nil {
 			return err
 		}
-		if err := runCommand("bash", tmp.Name()); err != nil {
+		if err := system.RunCommand("bash", tmp.Name()); err != nil {
 			return err
 		}
 	}
 
 	fmt.Println("Installing latest Node.js LTS through nvm.")
-	if err := runShellWithNVM(cfg, "nvm install --lts && nvm alias default 'lts/*' >/dev/null && nvm use --lts >/dev/null"); err != nil {
+	if err := system.RunShellWithNVM(cfg, "nvm install --lts && nvm alias default 'lts/*' >/dev/null && nvm use --lts >/dev/null"); err != nil {
 		return err
 	}
-	return ensureNVMShellInit(cfg)
+	return system.EnsureNVMShellInit(cfg)
 }
 
 // latestNVMVersion fetches the latest nvm release tag from GitHub.
@@ -163,17 +207,17 @@ func latestNVMVersion() (string, error) {
 }
 
 // nodeMajor returns the current Node.js major version after loading nvm.
-func nodeMajor(cfg config) (int, error) {
-	out, err := captureShellWithNVM(cfg, "node -p \"process.versions.node.split('.')[0]\"")
+func nodeMajor(cfg config.Config) (int, error) {
+	out, err := system.CaptureShellWithNVM(cfg, "node -p \"process.versions.node.split('.')[0]\"")
 	if err != nil {
 		return 0, err
 	}
 	return strconv.Atoi(strings.TrimSpace(out))
 }
 
-// npmGlobalPrefix returns the npm global install prefix.
-func npmGlobalPrefix(cfg config) (string, error) {
-	out, err := captureShellWithNVM(cfg, "npm config get prefix")
+// NPMGlobalPrefix returns the npm global install prefix.
+func NPMGlobalPrefix(cfg config.Config) (string, error) {
+	out, err := system.CaptureShellWithNVM(cfg, "npm config get prefix")
 	if err != nil {
 		return "", err
 	}
@@ -181,40 +225,40 @@ func npmGlobalPrefix(cfg config) (string, error) {
 }
 
 // npmGlobalPrefixWritable reports whether global npm installs can write there.
-func npmGlobalPrefixWritable(cfg config) bool {
-	prefix, err := npmGlobalPrefix(cfg)
+func npmGlobalPrefixWritable(cfg config.Config) bool {
+	prefix, err := NPMGlobalPrefix(cfg)
 	if err != nil || prefix == "" {
 		return false
 	}
 	info, err := os.Stat(prefix)
 	if err == nil && info.IsDir() {
-		return canWriteDir(prefix)
+		return system.CanWriteDir(prefix)
 	}
 	parent := filepath.Dir(prefix)
 	if parent == "." || parent == prefix {
 		return false
 	}
-	return canWriteDir(parent)
+	return system.CanWriteDir(parent)
 }
 
-// ensureNPMCLIPath makes globally installed npm binaries discoverable later.
-func ensureNPMCLIPath(cfg config) error {
-	if !commandExistsWithNVM(cfg, "npm") {
+// EnsureNPMCLIPath makes globally installed npm binaries discoverable later.
+func EnsureNPMCLIPath(cfg config.Config) error {
+	if !system.CommandExistsWithNVM(cfg, "npm") {
 		return nil
 	}
-	prefix, err := npmGlobalPrefix(cfg)
+	prefix, err := NPMGlobalPrefix(cfg)
 	if err != nil || prefix == "" {
 		return err
 	}
 	binDir := filepath.Join(prefix, "bin")
-	if strings.HasPrefix(binDir, cfg.nvmDir+string(os.PathSeparator)) {
-		return ensureNVMShellInit(cfg)
+	if strings.HasPrefix(binDir, cfg.NVMDir+string(os.PathSeparator)) {
+		return system.EnsureNVMShellInit(cfg)
 	}
-	return ensurePathEntryInRC(cfg, binDir)
+	return system.EnsurePathEntryInRC(cfg, binDir)
 }
 
-// npmVersionsForPackage fetches latest and recent semver versions from npm.
-func npmVersionsForPackage(packageName string, limit int) (string, []string, error) {
+// NPMVersionsForPackage fetches latest and recent semver versions from npm.
+func NPMVersionsForPackage(packageName string, limit int) (string, []string, error) {
 	url := "https://registry.npmjs.org/" + strings.ReplaceAll(packageName, "/", "%2F")
 	resp, err := http.Get(url)
 	if err != nil {
@@ -304,16 +348,16 @@ func compareSemver(a, b string) int {
 }
 
 // choosePackageVersion prompts for an npm package version or defaults to latest.
-func choosePackageVersion(cfg config, label, packageName string) (string, error) {
+func choosePackageVersion(cfg config.Config, label, packageName string) (string, error) {
 	fmt.Fprintf(os.Stderr, "Fetching available %s versions from npm registry.\n", label)
-	latest, versions, err := npmVersionsForPackage(packageName, cfg.versionLimit)
+	latest, versions, err := NPMVersionsForPackage(packageName, cfg.VersionLimit)
 	if err != nil {
 		return "", err
 	}
 	if latest == "" {
 		return "", fmt.Errorf("could not determine latest version for %s", packageName)
 	}
-	if !stdinIsTTY() {
+	if !system.StdinIsTTY() {
 		return "latest", nil
 	}
 
@@ -325,7 +369,7 @@ func choosePackageVersion(cfg config, label, packageName string) (string, error)
 	}
 	fmt.Fprintf(os.Stderr, "  or enter an exact version, for example %s\n", latest)
 
-	reader := newInputReader()
+	reader := system.NewInputReader()
 	for {
 		fmt.Fprintf(os.Stderr, "Choose %s version [0-%d or exact] (default 0): ", label, len(versions))
 		choice, _ := reader.ReadString('\n')
@@ -340,46 +384,49 @@ func choosePackageVersion(cfg config, label, packageName string) (string, error)
 		if err == nil && index >= 1 && index <= len(versions) {
 			return versions[index-1], nil
 		}
-		warn("enter a number between 0 and %d, or an exact version", len(versions))
+		system.Warn("enter a number between 0 and %d, or an exact version", len(versions))
 	}
 }
 
-// listVersions prints recent npm versions for one target or all npm targets.
-func listVersions(cfg config, target string) error {
-	normalized, err := normalizeTarget(target)
-	if err != nil {
-		return err
-	}
-	switch normalized {
+// ListVersions prints recent versions for one tool target or all tool targets.
+func ListVersions(cfg config.Config, target string) error {
+	switch target {
 	case "all":
-		for i, tool := range npmTools {
+		for i, tool := range NPMTools {
 			if i > 0 {
 				fmt.Println()
 			}
-			if err := listVersions(cfg, tool.target); err != nil {
+			if err := ListVersions(cfg, tool.Target); err != nil {
+				return err
+			}
+		}
+		for _, tool := range ReleaseTools {
+			fmt.Println()
+			if err := ListReleaseVersions(cfg, tool.Target); err != nil {
 				return err
 			}
 		}
 		return nil
-	case "skills":
-		return listSkills(cfg)
 	}
 
-	if err := ensureNode(cfg); err != nil {
-		return err
+	tool, ok := NPMToolByTarget(target)
+	if ok {
+		if err := EnsureNode(cfg); err != nil {
+			return err
+		}
+		latest, versions, err := NPMVersionsForPackage(tool.PackageName, cfg.VersionLimit)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s npm versions:\n", tool.Label)
+		fmt.Printf("latest: %s\n", latest)
+		for _, version := range versions {
+			fmt.Printf("  %s\n", version)
+		}
+		return nil
 	}
-	tool, ok := npmToolByTarget(normalized)
-	if !ok {
-		return fmt.Errorf("unknown npm target: %s", target)
+	if _, ok := ReleaseToolByTarget(target); ok {
+		return ListReleaseVersions(cfg, target)
 	}
-	latest, versions, err := npmVersionsForPackage(tool.packageName, cfg.versionLimit)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("%s npm versions:\n", tool.label)
-	fmt.Printf("latest: %s\n", latest)
-	for _, version := range versions {
-		fmt.Printf("  %s\n", version)
-	}
-	return nil
+	return fmt.Errorf("unknown target: %s", target)
 }

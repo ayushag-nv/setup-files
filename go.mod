@@ -1,3 +1,3 @@
-module github.com/ayushag-nv/setup-files
+module github.com/ayushag-nv/wolfpack
 
 go 1.22

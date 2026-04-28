@@ -1,6 +1,6 @@
-package main
+package skills
 
-// skills.go fetches and installs shared SKILL.md bundles for supported agents.
+// Package skills installs shared SKILL.md bundles for supported agents.
 
 import (
 	"errors"
@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/ayushag-nv/wolfpack/internal/wolfpack/config"
+	"github.com/ayushag-nv/wolfpack/internal/wolfpack/system"
 )
 
 // isExcludedSkill filters out skills Wolfpack must not install.
@@ -16,35 +19,35 @@ func isExcludedSkill(name string) bool {
 }
 
 // prepareSkillsSource resolves a local, git, or archive source for skills.
-func prepareSkillsSource(cfg config, tmpDir string) (string, error) {
-	if cfg.skillsSource != "" {
-		if stat, err := os.Stat(filepath.Join(cfg.skillsSource, "skills")); err != nil || !stat.IsDir() {
-			return "", fmt.Errorf("WOLFPACK_SKILLS_SOURCE must contain a skills/ directory: %s", cfg.skillsSource)
+func prepareSkillsSource(cfg config.Config, tmpDir string) (string, error) {
+	if cfg.SkillsSource != "" {
+		if stat, err := os.Stat(filepath.Join(cfg.SkillsSource, "skills")); err != nil || !stat.IsDir() {
+			return "", fmt.Errorf("WOLFPACK_SKILLS_SOURCE must contain a skills/ directory: %s", cfg.SkillsSource)
 		}
-		return cfg.skillsSource, nil
+		return cfg.SkillsSource, nil
 	}
 
 	sourceDir := filepath.Join(tmpDir, "source")
-	if haveCmd("git") {
-		fmt.Fprintf(os.Stderr, "Cloning skills from %s (%s).\n", cfg.skillsRepo, cfg.skillsRef)
-		if err := runCommandQuiet("git", "clone", "--depth", "1", "--branch", cfg.skillsRef, cfg.skillsRepo, sourceDir); err == nil {
+	if system.HaveCmd("git") {
+		fmt.Fprintf(os.Stderr, "Cloning skills from %s (%s).\n", cfg.SkillsRepo, cfg.SkillsRef)
+		if err := system.RunCommandQuiet("git", "clone", "--depth", "1", "--branch", cfg.SkillsRef, cfg.SkillsRepo, sourceDir); err == nil {
 			if stat, err := os.Stat(filepath.Join(sourceDir, "skills")); err == nil && stat.IsDir() {
 				return sourceDir, nil
 			}
 			return "", errors.New("cloned skills repository does not contain a skills/ directory")
 		}
-		warn("git clone failed; falling back to archive download")
+		system.Warn("git clone failed; falling back to archive download")
 	}
 
 	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
 		return "", err
 	}
 	archivePath := filepath.Join(tmpDir, "ai-skills.tar.gz")
-	fmt.Fprintf(os.Stderr, "Downloading skills from %s.\n", cfg.skillsArchiveURL)
-	if err := downloadFile(cfg.skillsArchiveURL, archivePath); err != nil {
+	fmt.Fprintf(os.Stderr, "Downloading skills from %s.\n", cfg.SkillsArchiveURL)
+	if err := system.DownloadFile(cfg.SkillsArchiveURL, archivePath); err != nil {
 		return "", err
 	}
-	if err := extractTarGZStripFirstComponent(archivePath, sourceDir); err != nil {
+	if err := system.ExtractTarGZStripFirstComponent(archivePath, sourceDir); err != nil {
 		return "", err
 	}
 	if stat, err := os.Stat(filepath.Join(sourceDir, "skills")); err != nil || !stat.IsDir() {
@@ -53,11 +56,8 @@ func prepareSkillsSource(cfg config, tmpDir string) (string, error) {
 	return sourceDir, nil
 }
 
-// listSkills prints installable skill names from the resolved source.
-func listSkills(cfg config) error {
-	if err := assertSupportedOS(); err != nil {
-		return err
-	}
+// List prints installable skill names from the resolved source.
+func List(cfg config.Config) error {
 	tmpDir, err := os.MkdirTemp("", "wolfpack-skills-*")
 	if err != nil {
 		return err
@@ -77,11 +77,8 @@ func listSkills(cfg config) error {
 	return nil
 }
 
-// installSkills copies shared skills into Claude, Codex, and OpenCode paths.
-func installSkills(cfg config) error {
-	if err := assertSupportedOS(); err != nil {
-		return err
-	}
+// Install copies shared skills into Claude, Codex, and OpenCode paths.
+func Install(cfg config.Config) error {
 	tmpDir, err := os.MkdirTemp("", "wolfpack-skills-*")
 	if err != nil {
 		return err
@@ -91,13 +88,13 @@ func installSkills(cfg config) error {
 	if err != nil {
 		return err
 	}
-	if err := installSkillsToDir(sourceDir, "Claude Code", cfg.claudeSkillsDir); err != nil {
+	if err := installSkillsToDir(sourceDir, "Claude Code", cfg.ClaudeSkillsDir); err != nil {
 		return err
 	}
-	if err := installSkillsToDir(sourceDir, "Codex", cfg.codexSkillsDir); err != nil {
+	if err := installSkillsToDir(sourceDir, "Codex", cfg.CodexSkillsDir); err != nil {
 		return err
 	}
-	return installSkillsToDir(sourceDir, "OpenCode", cfg.opencodeSkillsDir)
+	return installSkillsToDir(sourceDir, "OpenCode", cfg.OpenCodeSkillsDir)
 }
 
 // availableSkills returns sorted skills that contain a SKILL.md and are allowed.
@@ -134,7 +131,7 @@ func installSkillsToDir(sourceDir, targetLabel, targetDir string) error {
 		if err := os.MkdirAll(dst, 0o755); err != nil {
 			return err
 		}
-		if err := copyTree(src, dst); err != nil {
+		if err := system.CopyTree(src, dst); err != nil {
 			return err
 		}
 	}
