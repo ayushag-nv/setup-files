@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 INSTALL_DEPS="1"
+BOOTSTRAP_GO_VERSION="${BOOTSTRAP_GO_VERSION:-1.25.0}"
 
 usage() {
   cat <<'EOF'
@@ -12,8 +13,8 @@ Usage:
   ./install.sh [--no-deps]
 
 Options:
-  --no-deps    Only install the CLI wrapper. By default, the installer also
-               bootstraps required dependencies such as Node.js/npm.
+  --no-deps    Only build and install the CLI binary. By default, the
+               installer also bootstraps runtime dependencies such as Node.js.
 EOF
 }
 
@@ -34,16 +35,78 @@ case "${1:-}" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE="$SCRIPT_DIR/bin/ai-dev-setup"
 TARGET="$INSTALL_DIR/ai-dev-setup"
+TMP_GO_DIR=""
 
-[ -f "$SOURCE" ] || {
-  printf 'error: missing %s\n' "$SOURCE" >&2
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+fetch_url() {
+  local url="$1"
+  local output="$2"
+
+  if have_cmd curl; then
+    curl -fsSL "$url" -o "$output"
+    return
+  fi
+
+  if have_cmd wget; then
+    wget -qO "$output" "$url"
+    return
+  fi
+
+  printf 'error: curl or wget is required to download the temporary Go toolchain\n' >&2
   exit 1
 }
 
+bootstrap_go() {
+  local os arch url archive
+
+  if have_cmd go; then
+    command -v go
+    return
+  fi
+
+  case "$(uname -s)" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *)
+      printf 'error: unsupported OS: %s\n' "$(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="amd64" ;;
+    arm64|aarch64) arch="arm64" ;;
+    *)
+      printf 'error: unsupported architecture: %s\n' "$(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  TMP_GO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ai-dev-setup-go.XXXXXX")"
+  archive="$TMP_GO_DIR/go.tar.gz"
+  url="https://go.dev/dl/go${BOOTSTRAP_GO_VERSION}.${os}-${arch}.tar.gz"
+
+  printf 'Go was not found; downloading temporary Go %s from %s\n' "$BOOTSTRAP_GO_VERSION" "$url" >&2
+  fetch_url "$url" "$archive"
+  tar -C "$TMP_GO_DIR" -xzf "$archive"
+  printf '%s/go/bin/go\n' "$TMP_GO_DIR"
+}
+
+cleanup() {
+  if [ -n "$TMP_GO_DIR" ]; then
+    rm -rf "$TMP_GO_DIR"
+  fi
+}
+trap cleanup EXIT
+
+GO_BIN="$(bootstrap_go)"
+
 mkdir -p "$INSTALL_DIR"
-cp "$SOURCE" "$TARGET"
+"$GO_BIN" build -trimpath -ldflags "-s -w" -o "$TARGET" "$SCRIPT_DIR/cmd/ai-dev-setup"
 chmod +x "$TARGET"
 
 case ":$PATH:" in

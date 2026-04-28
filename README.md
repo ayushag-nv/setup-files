@@ -9,8 +9,7 @@ It currently installs:
 - Shared AI skills from `https://github.com/ayushag-nv/ai-skills`
 - API keys into `~/.bashrc`, including `NVIDIA_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY`
 
-The installer and CLI are Bash-only and use user-local Node.js/npm through `nvm` when a suitable writable Node install is not already available.
-For now Bash is the pragmatic fit because this tool mostly bootstraps shell startup files, npm CLIs, archives, and skill directories. The skill commands are isolated so the CLI can move to Go or Rust cleanly as scope grows.
+The CLI is implemented in Go and uses user-local Node.js/npm through `nvm` when a suitable writable Node install is not already available. `install.sh` is only a bootstrapper: it builds the Go binary and can download a temporary Go toolchain if Go is not already installed.
 
 ## Install
 
@@ -18,9 +17,9 @@ For now Bash is the pragmatic fit because this tool mostly bootstraps shell star
 ./install.sh
 ```
 
-This installs the CLI to `~/.local/bin/ai-dev-setup`, adds `~/.local/bin` to `PATH` through `~/.bashrc`, and bootstraps dependencies such as Node.js/npm.
+This builds the Go CLI, installs it to `~/.local/bin/ai-dev-setup`, adds `~/.local/bin` to `PATH` through `~/.bashrc`, and bootstraps runtime dependencies such as Node.js/npm.
 
-To install only the wrapper:
+To install only the binary:
 
 ```bash
 ./install.sh --no-deps
@@ -78,6 +77,16 @@ Check the local setup:
 ```bash
 ai-dev-setup doctor
 ```
+
+## Development
+
+Build from source:
+
+```bash
+go build ./cmd/ai-dev-setup
+```
+
+The source-checkout wrapper at `bin/ai-dev-setup` runs the Go CLI with `go run` when Go is available. Installed users should use `./install.sh`, which produces a standalone binary.
 
 ## Troubleshooting
 
