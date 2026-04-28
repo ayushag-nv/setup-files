@@ -1,5 +1,7 @@
 # Wolfpack
 
+![Wolfpack hero](assets/wolfpack-hero.png)
+
 Wolfpack is a Go-based command-line tool for bootstrapping a local AI development environment on macOS and Linux.
 
 It installs AI coding CLIs, configures provider API keys, and installs shared `SKILL.md` bundles into the directories used by Claude Code, OpenAI Codex, and OpenCode.
