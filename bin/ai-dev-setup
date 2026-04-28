@@ -2,13 +2,19 @@
 set -Eeuo pipefail
 
 CLI_NAME="ai-dev-setup"
-CLI_VERSION="0.1.2"
+CLI_VERSION="0.2.0"
 
 CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 CODEX_PACKAGE="@openai/codex"
 MIN_NODE_MAJOR=18
 DEFAULT_VERSION_LIMIT="${AI_SETUP_VERSION_LIMIT:-20}"
 RC_FILE="${AI_SETUP_RC:-$HOME/.bashrc}"
+SKILLS_REF="${AI_SETUP_SKILLS_REF:-main}"
+SKILLS_REPO_URL="${AI_SETUP_SKILLS_REPO:-https://github.com/ayushag-nv/ai-skills.git}"
+SKILLS_ARCHIVE_URL="${AI_SETUP_SKILLS_ARCHIVE_URL:-https://github.com/ayushag-nv/ai-skills/archive/refs/heads/$SKILLS_REF.tar.gz}"
+SKILLS_SOURCE_DIR="${AI_SETUP_SKILLS_SOURCE:-}"
+CLAUDE_SKILLS_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-${CODEX_HOME:-$HOME/.codex}/skills}"
 BEGIN_MARKER="# >>> ai-dev-setup managed env >>>"
 END_MARKER="# <<< ai-dev-setup managed env <<<"
 WRAPPER_BEGIN_MARKER="# >>> ai-dev-setup shell wrapper >>>"
@@ -36,20 +42,26 @@ usage() {
 ai-dev-setup
 
 Usage:
-  ai-dev-setup install [all|claude|codex|code]
+  ai-dev-setup install [all|claude|codex|code|skills]
   ai-dev-setup versions [claude|codex|code]
+  ai-dev-setup skills [install|list]
   ai-dev-setup keys
   ai-dev-setup deps
   ai-dev-setup doctor
   ai-dev-setup help
 
 Defaults:
-  install all     Installs Claude Code, Codex CLI, and prompts for API keys.
+  install all     Installs Claude Code, Codex CLI, skills, and prompts for API keys.
   codex/code      Both target the OpenAI Codex CLI npm package.
 
 Environment:
   AI_SETUP_RC               Shell rc file for exported API keys (default: ~/.bashrc)
   AI_SETUP_VERSION_LIMIT    Number of npm versions to show (default: 20)
+  AI_SETUP_SKILLS_REPO      ai-skills git repository URL
+  AI_SETUP_SKILLS_REF       ai-skills branch/ref to install (default: main)
+  AI_SETUP_SKILLS_SOURCE    Local ai-skills checkout to install from instead of downloading
+  CLAUDE_SKILLS_DIR         Claude Code skills destination (default: ~/.claude/skills)
+  CODEX_SKILLS_DIR          Codex skills destination (default: ${CODEX_HOME:-~/.codex}/skills)
   NVM_VERSION               nvm release tag override, such as v0.40.3
 EOF
 }
@@ -59,6 +71,7 @@ normalize_target() {
     all) printf 'all\n' ;;
     claude|claude-code) printf 'claude\n' ;;
     codex|code|openai-code|openai-codex) printf 'codex\n' ;;
+    skills|skill) printf 'skills\n' ;;
     *) die "unknown target: $1" ;;
   esac
 }
@@ -502,6 +515,130 @@ install_codex() {
   install_npm_tool "OpenAI Codex CLI" "$CODEX_PACKAGE" "codex"
 }
 
+is_excluded_skill() {
+  case "$1" in
+    ultimate-auto|ultimate-bypass) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_tar() {
+  if have_cmd tar; then
+    return
+  fi
+
+  log "Installing tar because it is required to unpack the skills bundle."
+  install_with_package_manager tar || die "tar is required, and no supported package manager was found"
+}
+
+ensure_git() {
+  if have_cmd git; then
+    return
+  fi
+
+  log "Installing git because it is required to fetch the skills bundle."
+  install_with_package_manager git || return 1
+}
+
+prepare_skills_source() {
+  local tmp_dir="$1"
+  local archive="$tmp_dir/ai-skills.tar.gz"
+  local source_dir="$tmp_dir/source"
+
+  if [ -n "$SKILLS_SOURCE_DIR" ]; then
+    [ -d "$SKILLS_SOURCE_DIR/skills" ] || die "AI_SETUP_SKILLS_SOURCE must contain a skills/ directory: $SKILLS_SOURCE_DIR"
+    PREPARED_SKILLS_SOURCE="$SKILLS_SOURCE_DIR"
+    return
+  fi
+
+  mkdir -p "$source_dir"
+
+  if ensure_git; then
+    info "Cloning skills from $SKILLS_REPO_URL ($SKILLS_REF)."
+    if git clone --depth 1 --branch "$SKILLS_REF" "$SKILLS_REPO_URL" "$source_dir" >/dev/null 2>&1; then
+      [ -d "$source_dir/skills" ] || die "cloned skills repository does not contain a skills/ directory"
+      PREPARED_SKILLS_SOURCE="$source_dir"
+      return
+    fi
+    warn "git clone failed; falling back to archive download"
+  fi
+
+  ensure_fetcher
+  ensure_tar
+  info "Downloading skills from $SKILLS_ARCHIVE_URL."
+  fetch_url "$SKILLS_ARCHIVE_URL" >"$archive"
+  tar -xzf "$archive" -C "$source_dir" --strip-components=1
+  [ -d "$source_dir/skills" ] || die "downloaded skills archive does not contain a skills/ directory"
+  PREPARED_SKILLS_SOURCE="$source_dir"
+}
+
+list_available_skills_from_source() {
+  local source_dir="$1"
+  local skill_dir skill_name
+
+  for skill_dir in "$source_dir"/skills/*; do
+    [ -d "$skill_dir" ] || continue
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    is_excluded_skill "$skill_name" && continue
+    printf '%s\n' "$skill_name"
+  done
+}
+
+install_skills_to_dir() {
+  local source_dir="$1"
+  local target_label="$2"
+  local target_dir="$3"
+  local skill_dir skill_name dest count=0
+
+  mkdir -p "$target_dir"
+
+  for skill_dir in "$source_dir"/skills/*; do
+    [ -d "$skill_dir" ] || continue
+    [ -f "$skill_dir/SKILL.md" ] || continue
+    skill_name="$(basename "$skill_dir")"
+
+    if is_excluded_skill "$skill_name"; then
+      info "Skipping excluded skill: $skill_name"
+      continue
+    fi
+
+    dest="$target_dir/$skill_name"
+    mkdir -p "$dest"
+    cp -a "$skill_dir"/. "$dest"/
+    count=$((count + 1))
+  done
+
+  log "Installed $count skills for $target_label into $target_dir."
+}
+
+install_skills() {
+  local tmp_dir source_dir
+
+  assert_supported_os
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/ai-dev-setup-skills.XXXXXX")"
+  PREPARED_SKILLS_SOURCE=""
+  prepare_skills_source "$tmp_dir"
+  source_dir="$PREPARED_SKILLS_SOURCE"
+
+  install_skills_to_dir "$source_dir" "Claude Code" "$CLAUDE_SKILLS_DIR"
+  install_skills_to_dir "$source_dir" "Codex" "$CODEX_SKILLS_DIR"
+
+  rm -rf "$tmp_dir"
+}
+
+list_skills() {
+  local tmp_dir source_dir
+
+  assert_supported_os
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/ai-dev-setup-skills.XXXXXX")"
+  PREPARED_SKILLS_SOURCE=""
+  prepare_skills_source "$tmp_dir"
+  source_dir="$PREPARED_SKILLS_SOURCE"
+  list_available_skills_from_source "$source_dir"
+  rm -rf "$tmp_dir"
+}
+
 shell_quote() {
   local value="$1"
   printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
@@ -676,6 +813,7 @@ configure_keys() {
 install_all() {
   install_claude
   install_codex
+  install_skills
   configure_keys
 }
 
@@ -691,6 +829,10 @@ list_versions() {
     codex)
       package_name="$CODEX_PACKAGE"
       label="OpenAI Codex CLI"
+      ;;
+    skills)
+      list_skills
+      return
       ;;
     all)
       list_versions claude
@@ -760,14 +902,18 @@ doctor() {
     log "codex: missing"
   fi
 
+  log "claude skills dir: $CLAUDE_SKILLS_DIR"
+  log "codex skills dir: $CODEX_SKILLS_DIR"
   log "api key rc file: $RC_FILE"
 }
 
 ensure_deps() {
   assert_supported_os
   ensure_fetcher
+  ensure_git || warn "git is unavailable; skills install will fall back to archive downloads"
   ensure_node
   ensure_npm_cli_path
+  ensure_tar
   install_shell_wrapper "$RC_FILE"
   maybe_source_bashrc_from_shell_profile
   log "Dependencies are ready."
@@ -790,19 +936,21 @@ ai-dev-setup
   2) Install Claude Code
   3) Install OpenAI Codex CLI
   4) Configure API keys
-  5) Doctor
-  6) Quit
+  5) Install skills
+  6) Doctor
+  7) Quit
 EOF
-    printf 'Choose an option [1-6]: ' >&2
+    printf 'Choose an option [1-7]: ' >&2
     IFS= read -r choice || choice=""
     case "$choice" in
       1) install_all ;;
       2) install_claude ;;
       3) install_codex ;;
       4) configure_keys ;;
-      5) doctor ;;
-      6|q|Q) return ;;
-      *) warn "choose a number from 1 to 6" ;;
+      5) install_skills ;;
+      6) doctor ;;
+      7|q|Q) return ;;
+      *) warn "choose a number from 1 to 7" ;;
     esac
   done
 }
@@ -821,6 +969,7 @@ main() {
         all) install_all ;;
         claude) install_claude ;;
         codex) install_codex ;;
+        skills) install_skills ;;
       esac
       ;;
     versions)
@@ -828,6 +977,13 @@ main() {
       ;;
     keys)
       configure_keys
+      ;;
+    skills)
+      case "${2:-install}" in
+        install) install_skills ;;
+        list) list_skills ;;
+        *) usage >&2; exit 2 ;;
+      esac
       ;;
     deps)
       ensure_deps
