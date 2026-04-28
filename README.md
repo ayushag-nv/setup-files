@@ -88,6 +88,20 @@ go build ./cmd/ai-dev-setup
 
 The source-checkout wrapper at `bin/ai-dev-setup` runs the Go CLI with `go run` when Go is available. Installed users should use `./install.sh`, which produces a standalone binary.
 
+## Roadmap
+
+Near-term improvements:
+
+- Add a `status --json` mode so other scripts can consume installed versions, skill state, and missing dependencies.
+- Add a structured config file under `~/.config/ai-dev-setup/config.toml` for default tool versions, skill destinations, and API-key prompts.
+- Add checksums or signed release verification for downloaded toolchains and skill archives.
+- Add self-update support for both `ai-dev-setup` and the `ai-skills` bundle.
+- Add `skills update`, `skills diff`, and `skills remove` commands instead of only install/list.
+- Add first-class shell support for zsh/fish in addition to the current bash-focused startup edits.
+- Add optional install targets for common developer tools such as `uv`, `ruff`, `gh`, `glab`, and container tooling.
+- Add dry-run support for install commands so changes to shell files and destination directories can be reviewed first.
+- Add proper unit tests around semver sorting, shell rc-file edits, skill copy behavior, and archive extraction.
+
 ## Troubleshooting
 
 If an install reports success but the command is not available in your shell, reload your shell startup file:
