@@ -1,0 +1,725 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CLI_NAME="ai-dev-setup"
+CLI_VERSION="0.1.0"
+
+CLAUDE_PACKAGE="@anthropic-ai/claude-code"
+CODEX_PACKAGE="@openai/codex"
+MIN_NODE_MAJOR=18
+DEFAULT_VERSION_LIMIT="${AI_SETUP_VERSION_LIMIT:-20}"
+RC_FILE="${AI_SETUP_RC:-$HOME/.bashrc}"
+BEGIN_MARKER="# >>> ai-dev-setup managed env >>>"
+END_MARKER="# <<< ai-dev-setup managed env <<<"
+
+log() {
+  printf '%s\n' "$*"
+}
+
+warn() {
+  printf 'warning: %s\n' "$*" >&2
+}
+
+info() {
+  printf '%s\n' "$*" >&2
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+ai-dev-setup
+
+Usage:
+  ai-dev-setup install [all|claude|codex|code]
+  ai-dev-setup versions [claude|codex|code]
+  ai-dev-setup keys
+  ai-dev-setup deps
+  ai-dev-setup doctor
+  ai-dev-setup help
+
+Defaults:
+  install all     Installs Claude Code, Codex CLI, and prompts for API keys.
+  codex/code      Both target the OpenAI Codex CLI npm package.
+
+Environment:
+  AI_SETUP_RC               Shell rc file for exported API keys (default: ~/.bashrc)
+  AI_SETUP_VERSION_LIMIT    Number of npm versions to show (default: 20)
+  NVM_VERSION               nvm release tag override, such as v0.40.3
+EOF
+}
+
+normalize_target() {
+  case "${1:-all}" in
+    all) printf 'all\n' ;;
+    claude|claude-code) printf 'claude\n' ;;
+    codex|code|openai-code|openai-codex) printf 'codex\n' ;;
+    *) die "unknown target: $1" ;;
+  esac
+}
+
+assert_supported_os() {
+  case "$(uname -s)" in
+    Darwin|Linux) ;;
+    *) die "unsupported OS: $(uname -s). This CLI supports macOS and Linux." ;;
+  esac
+}
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+install_with_package_manager() {
+  local package_name="$1"
+
+  if have_cmd brew; then
+    brew install "$package_name"
+    return
+  fi
+
+  if have_cmd apt-get; then
+    sudo apt-get update
+    sudo apt-get install -y "$package_name"
+    return
+  fi
+
+  if have_cmd dnf; then
+    sudo dnf install -y "$package_name"
+    return
+  fi
+
+  if have_cmd yum; then
+    sudo yum install -y "$package_name"
+    return
+  fi
+
+  if have_cmd pacman; then
+    sudo pacman -Sy --needed --noconfirm "$package_name"
+    return
+  fi
+
+  return 1
+}
+
+ensure_fetcher() {
+  if have_cmd curl || have_cmd wget; then
+    return
+  fi
+
+  log "Installing curl because no HTTP fetcher is available."
+  install_with_package_manager curl || die "curl or wget is required, and no supported package manager was found"
+}
+
+fetch_url() {
+  local url="$1"
+
+  ensure_fetcher
+  if have_cmd curl; then
+    curl -fsSL "$url"
+  else
+    wget -qO- "$url"
+  fi
+}
+
+node_major() {
+  node -p "process.versions.node.split('.')[0]" 2>/dev/null || printf '0\n'
+}
+
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "$NVM_DIR/nvm.sh"
+  fi
+}
+
+latest_nvm_version() {
+  fetch_url "https://api.github.com/repos/nvm-sh/nvm/releases/latest" |
+    sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' |
+    sed -n '1p'
+}
+
+install_nvm_and_node() {
+  local nvm_version
+
+  load_nvm
+  if ! have_cmd nvm; then
+    nvm_version="${NVM_VERSION:-$(latest_nvm_version || true)}"
+    if [ -z "${nvm_version:-}" ]; then
+      nvm_version="v0.40.3"
+      warn "could not detect latest nvm release; falling back to $nvm_version"
+    fi
+
+    log "Installing nvm $nvm_version."
+    fetch_url "https://raw.githubusercontent.com/nvm-sh/nvm/$nvm_version/install.sh" | bash
+    load_nvm
+  fi
+
+  have_cmd nvm || die "nvm installation did not load correctly"
+
+  log "Installing latest Node.js LTS through nvm."
+  nvm install --lts
+  nvm alias default 'lts/*' >/dev/null
+  nvm use --lts >/dev/null
+}
+
+npm_global_prefix_writable() {
+  local prefix parent
+
+  prefix="$(npm config get prefix 2>/dev/null || true)"
+  [ -n "$prefix" ] || return 1
+
+  if [ -d "$prefix" ]; then
+    [ -w "$prefix" ]
+    return
+  fi
+
+  parent="$(dirname "$prefix")"
+  [ -d "$parent" ] && [ -w "$parent" ]
+}
+
+ensure_node() {
+  local major
+
+  load_nvm
+  if have_cmd node && have_cmd npm; then
+    major="$(node_major)"
+    if [ "$major" -ge "$MIN_NODE_MAJOR" ] && npm_global_prefix_writable; then
+      return
+    fi
+
+    if [ "$major" -lt "$MIN_NODE_MAJOR" ]; then
+      warn "Node.js $MIN_NODE_MAJOR+ is required; current major is $major."
+    else
+      warn "npm global prefix is not writable; installing user-local Node.js through nvm."
+    fi
+  else
+    log "Node.js and npm are required; installing them through nvm."
+  fi
+
+  install_nvm_and_node
+  have_cmd node || die "node was not found after installation"
+  have_cmd npm || die "npm was not found after installation"
+}
+
+npm_versions_for_package() {
+  local package_name="$1"
+  local limit="$2"
+
+  node - "$package_name" "$limit" <<'NODE'
+const https = require("https");
+
+const packageName = process.argv[2];
+const limit = Number(process.argv[3] || 20);
+const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}`;
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { "accept": "application/json" } }, (res) => {
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        reject(new Error(`npm registry returned HTTP ${res.statusCode}`));
+        res.resume();
+        return;
+      }
+
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", chunk => { body += chunk; });
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    }).on("error", reject);
+  });
+}
+
+function parseSemver(version) {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
+  if (!match) return null;
+  return {
+    raw: version,
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4] || "",
+  };
+}
+
+function compareSemver(a, b) {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa && !pb) return a.localeCompare(b);
+  if (!pa) return -1;
+  if (!pb) return 1;
+  for (const key of ["major", "minor", "patch"]) {
+    if (pa[key] !== pb[key]) return pa[key] - pb[key];
+  }
+  if (pa.prerelease === pb.prerelease) return 0;
+  if (!pa.prerelease) return 1;
+  if (!pb.prerelease) return -1;
+  return pa.prerelease.localeCompare(pb.prerelease);
+}
+
+(async () => {
+  const metadata = await fetchJson(registryUrl);
+  const latest = metadata["dist-tags"] && metadata["dist-tags"].latest
+    ? metadata["dist-tags"].latest
+    : "";
+  const allVersions = Object.keys(metadata.versions || {}).filter(v => parseSemver(v));
+  const stableVersions = allVersions.filter(v => /^\d+\.\d+\.\d+$/.test(v));
+  const versions = (stableVersions.length ? stableVersions : allVersions)
+    .sort(compareSemver)
+    .slice(-limit)
+    .reverse();
+
+  console.log(`latest=${latest}`);
+  for (const version of versions) {
+    console.log(version);
+  }
+})().catch(error => {
+  console.error(`failed to fetch versions for ${packageName}: ${error.message}`);
+  process.exit(1);
+});
+NODE
+}
+
+choose_package_version() {
+  local label="$1"
+  local package_name="$2"
+  local latest=""
+  local line choice max index selected
+  local versions=()
+
+  info "Fetching available $label versions from npm registry."
+  while IFS= read -r line; do
+    case "$line" in
+      latest=*) latest="${line#latest=}" ;;
+      '') ;;
+      *) versions+=("$line") ;;
+    esac
+  done < <(npm_versions_for_package "$package_name" "$DEFAULT_VERSION_LIMIT")
+
+  [ -n "$latest" ] || die "could not determine latest version for $package_name"
+
+  if [ ! -t 0 ]; then
+    printf 'latest\n'
+    return
+  fi
+
+  info ""
+  info "$label versions:"
+  info "  0) latest ($latest)"
+  index=1
+  for line in "${versions[@]}"; do
+    info "  $index) $line"
+    index=$((index + 1))
+  done
+  info "  or enter an exact version, for example $latest"
+
+  max="${#versions[@]}"
+  while true; do
+    printf 'Choose %s version [0-%s or exact] (default 0): ' "$label" "$max" >&2
+    IFS= read -r choice || choice=""
+    choice="${choice:-0}"
+
+    case "$choice" in
+      ''|*[!0-9.]*)
+        warn "enter a number between 0 and $max, or an exact version"
+        ;;
+      0) printf 'latest\n'; return ;;
+      *)
+        if [ "${choice#*.}" != "$choice" ]; then
+          printf '%s\n' "$choice"
+          return
+        fi
+        if [ "$choice" -ge 1 ] && [ "$choice" -le "$max" ]; then
+          selected="${versions[$((choice - 1))]}"
+          printf '%s\n' "$selected"
+          return
+        fi
+        warn "enter a number between 0 and $max, or an exact version"
+        ;;
+    esac
+  done
+}
+
+install_npm_tool() {
+  local label="$1"
+  local package_name="$2"
+  local binary_name="$3"
+  local version package_spec
+
+  assert_supported_os
+  ensure_node
+
+  version="$(choose_package_version "$label" "$package_name")"
+  package_spec="$package_name@$version"
+
+  log "Installing $label with npm package $package_spec."
+  npm install -g "$package_spec"
+
+  if have_cmd "$binary_name"; then
+    log "$label installed:"
+    "$binary_name" --version || true
+  else
+    warn "$label install completed, but '$binary_name' is not on PATH in this shell"
+  fi
+}
+
+install_claude() {
+  install_npm_tool "Claude Code" "$CLAUDE_PACKAGE" "claude"
+}
+
+install_codex() {
+  install_npm_tool "OpenAI Codex CLI" "$CODEX_PACKAGE" "codex"
+}
+
+shell_quote() {
+  local value="$1"
+  printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
+}
+
+ensure_managed_block() {
+  local rc_file="$1"
+  local rc_dir
+
+  rc_dir="$(dirname "$rc_file")"
+  mkdir -p "$rc_dir"
+  touch "$rc_file"
+
+  if ! grep -Fq "$BEGIN_MARKER" "$rc_file"; then
+    {
+      printf '\n%s\n' "$BEGIN_MARKER"
+      printf '%s\n' "$END_MARKER"
+    } >>"$rc_file"
+  fi
+}
+
+upsert_env_var() {
+  local key="$1"
+  local value="$2"
+  local rc_file="$3"
+  local quoted tmp line
+
+  case "$key" in
+    [A-Za-z_][A-Za-z0-9_]*) ;;
+    *) die "invalid environment variable name: $key" ;;
+  esac
+
+  ensure_managed_block "$rc_file"
+  quoted="$(shell_quote "$value")"
+  line="export $key=$quoted"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/ai-dev-setup.XXXXXX")"
+
+  awk \
+    -v begin="$BEGIN_MARKER" \
+    -v end="$END_MARKER" \
+    -v key="$key" \
+    -v newline="$line" '
+      $0 == begin { in_block = 1; print; next }
+      $0 == end {
+        if (!seen) print newline
+        in_block = 0
+        print
+        next
+      }
+      in_block && $0 ~ "^export[[:space:]]+" key "=" {
+        if (!seen) {
+          print newline
+          seen = 1
+        }
+        next
+      }
+      { print }
+    ' "$rc_file" >"$tmp"
+
+  mv "$tmp" "$rc_file"
+}
+
+prompt_secret() {
+  local prompt="$1"
+  local value
+
+  if [ -t 0 ]; then
+    printf '%s' "$prompt" >&2
+    IFS= read -r -s value || value=""
+    printf '\n' >&2
+  else
+    IFS= read -r value || value=""
+  fi
+
+  printf '%s\n' "$value"
+}
+
+configure_one_key() {
+  local key="$1"
+  local value
+
+  value="$(prompt_secret "$key (leave blank to skip): ")"
+  if [ -n "$value" ]; then
+    upsert_env_var "$key" "$value" "$RC_FILE"
+    log "Saved $key to $RC_FILE."
+  else
+    log "Skipped $key."
+  fi
+}
+
+prompt_yes_no() {
+  local prompt="$1"
+  local default_yes="${2:-false}"
+  local answer suffix
+
+  if [ "$default_yes" = "true" ]; then
+    suffix="[Y/n]"
+  else
+    suffix="[y/N]"
+  fi
+
+  if [ ! -t 0 ]; then
+    [ "$default_yes" = "true" ]
+    return
+  fi
+
+  while true; do
+    printf '%s %s ' "$prompt" "$suffix" >&2
+    IFS= read -r answer || answer=""
+    answer="${answer:-}"
+    case "$answer" in
+      '') [ "$default_yes" = "true" ] && return 0 || return 1 ;;
+      y|Y|yes|YES) return 0 ;;
+      n|N|no|NO) return 1 ;;
+      *) warn "answer yes or no" ;;
+    esac
+  done
+}
+
+maybe_source_bashrc_from_shell_profile() {
+  local shell_name profile source_line
+
+  shell_name="$(basename "${SHELL:-}")"
+  source_line='[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"'
+
+  case "$shell_name" in
+    bash)
+      if [ "$(uname -s)" = "Darwin" ]; then
+        profile="$HOME/.bash_profile"
+        touch "$profile"
+        if ! grep -Fq '.bashrc' "$profile"; then
+          if prompt_yes_no "On macOS, bash login shells read ~/.bash_profile. Source ~/.bashrc from it?" true; then
+            printf '\n%s\n' "$source_line" >>"$profile"
+            log "Updated $profile to source ~/.bashrc."
+          fi
+        fi
+      fi
+      ;;
+    zsh)
+      profile="$HOME/.zshrc"
+      touch "$profile"
+      if ! grep -Fq '.bashrc' "$profile"; then
+        if prompt_yes_no "Your shell appears to be zsh. Source ~/.bashrc from ~/.zshrc too?" true; then
+          printf '\n%s\n' "$source_line" >>"$profile"
+          log "Updated $profile to source ~/.bashrc."
+        fi
+      fi
+      ;;
+  esac
+}
+
+configure_keys() {
+  local custom_key
+
+  log "API keys will be saved in $RC_FILE."
+  configure_one_key "NVIDIA_API_KEY"
+  configure_one_key "ANTHROPIC_API_KEY"
+  configure_one_key "OPENAI_API_KEY"
+
+  while prompt_yes_no "Add another API key?" false; do
+    printf 'Environment variable name: ' >&2
+    IFS= read -r custom_key || custom_key=""
+    [ -n "$custom_key" ] || continue
+    configure_one_key "$custom_key"
+  done
+
+  maybe_source_bashrc_from_shell_profile
+  log "Reload with: source $RC_FILE"
+}
+
+install_all() {
+  install_claude
+  install_codex
+  configure_keys
+}
+
+list_versions() {
+  local target="$1"
+  local package_name label line
+
+  case "$(normalize_target "$target")" in
+    claude)
+      package_name="$CLAUDE_PACKAGE"
+      label="Claude Code"
+      ;;
+    codex)
+      package_name="$CODEX_PACKAGE"
+      label="OpenAI Codex CLI"
+      ;;
+    all)
+      list_versions claude
+      log ""
+      list_versions codex
+      return
+      ;;
+  esac
+
+  ensure_node
+  log "$label npm versions:"
+  while IFS= read -r line; do
+    case "$line" in
+      latest=*) log "latest: ${line#latest=}" ;;
+      *) log "  $line" ;;
+    esac
+  done < <(npm_versions_for_package "$package_name" "$DEFAULT_VERSION_LIMIT")
+}
+
+show_doctor_line() {
+  local name="$1"
+  shift
+
+  if "$@" >/dev/null 2>&1; then
+    printf 'ok      %s\n' "$name"
+  else
+    printf 'missing %s\n' "$name"
+  fi
+}
+
+doctor() {
+  local node_version npm_version prefix
+
+  assert_supported_os
+  log "OS: $(uname -s) $(uname -m)"
+
+  show_doctor_line "curl or wget" sh -c 'command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1'
+
+  if have_cmd node; then
+    node_version="$(node --version)"
+    log "node: $node_version"
+  else
+    log "node: missing"
+  fi
+
+  if have_cmd npm; then
+    npm_version="$(npm --version)"
+    prefix="$(npm config get prefix 2>/dev/null || true)"
+    log "npm: $npm_version"
+    log "npm prefix: ${prefix:-unknown}"
+  else
+    log "npm: missing"
+  fi
+
+  if have_cmd claude; then
+    printf 'claude: '
+    claude --version || true
+  else
+    log "claude: missing"
+  fi
+
+  if have_cmd codex; then
+    printf 'codex: '
+    codex --version || true
+  else
+    log "codex: missing"
+  fi
+
+  log "api key rc file: $RC_FILE"
+}
+
+ensure_deps() {
+  assert_supported_os
+  ensure_fetcher
+  ensure_node
+  log "Dependencies are ready."
+}
+
+interactive_menu() {
+  local choice
+
+  if [ ! -t 0 ]; then
+    install_all
+    return
+  fi
+
+  while true; do
+    cat >&2 <<'EOF'
+
+ai-dev-setup
+  1) Install everything
+  2) Install Claude Code
+  3) Install OpenAI Codex CLI
+  4) Configure API keys
+  5) Doctor
+  6) Quit
+EOF
+    printf 'Choose an option [1-6]: ' >&2
+    IFS= read -r choice || choice=""
+    case "$choice" in
+      1) install_all ;;
+      2) install_claude ;;
+      3) install_codex ;;
+      4) configure_keys ;;
+      5) doctor ;;
+      6|q|Q) return ;;
+      *) warn "choose a number from 1 to 6" ;;
+    esac
+  done
+}
+
+main() {
+  local command="${1:-}"
+  local target
+
+  case "$command" in
+    "")
+      interactive_menu
+      ;;
+    install)
+      target="$(normalize_target "${2:-all}")"
+      case "$target" in
+        all) install_all ;;
+        claude) install_claude ;;
+        codex) install_codex ;;
+      esac
+      ;;
+    versions)
+      list_versions "${2:-all}"
+      ;;
+    keys)
+      configure_keys
+      ;;
+    deps)
+      ensure_deps
+      ;;
+    doctor)
+      doctor
+      ;;
+    -h|--help|help)
+      usage
+      ;;
+    -v|--version|version)
+      log "$CLI_NAME $CLI_VERSION"
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+if [ "${AI_DEV_SETUP_NO_MAIN:-0}" != "1" ]; then
+  main "$@"
+fi
