@@ -8,16 +8,17 @@ import (
 )
 
 type config struct {
-	home             string
-	rcFile           string
-	versionLimit     int
-	skillsRef        string
-	skillsRepo       string
-	skillsArchiveURL string
-	skillsSource     string
-	claudeSkillsDir  string
-	codexSkillsDir   string
-	nvmDir           string
+	home              string
+	rcFile            string
+	versionLimit      int
+	skillsRef         string
+	skillsRepo        string
+	skillsArchiveURL  string
+	skillsSource      string
+	claudeSkillsDir   string
+	codexSkillsDir    string
+	opencodeSkillsDir string
+	nvmDir            string
 }
 
 func loadConfig() config {
@@ -38,16 +39,17 @@ func loadConfig() config {
 	}
 
 	return config{
-		home:             home,
-		rcFile:           envDefault("WOLFPACK_RC", filepath.Join(home, ".bashrc")),
-		versionLimit:     versionLimit,
-		skillsRef:        skillsRef,
-		skillsRepo:       envDefault("WOLFPACK_SKILLS_REPO", defaultSkillsGit),
-		skillsArchiveURL: archiveURL,
-		skillsSource:     os.Getenv("WOLFPACK_SKILLS_SOURCE"),
-		claudeSkillsDir:  envDefault("CLAUDE_SKILLS_DIR", filepath.Join(home, ".claude", "skills")),
-		codexSkillsDir:   envDefault("CODEX_SKILLS_DIR", filepath.Join(codexHome, "skills")),
-		nvmDir:           nvmDir,
+		home:              home,
+		rcFile:            envDefault("WOLFPACK_RC", filepath.Join(home, ".bashrc")),
+		versionLimit:      versionLimit,
+		skillsRef:         skillsRef,
+		skillsRepo:        envDefault("WOLFPACK_SKILLS_REPO", defaultSkillsGit),
+		skillsArchiveURL:  archiveURL,
+		skillsSource:      os.Getenv("WOLFPACK_SKILLS_SOURCE"),
+		claudeSkillsDir:   envDefault("CLAUDE_SKILLS_DIR", filepath.Join(home, ".claude", "skills")),
+		codexSkillsDir:    envDefault("CODEX_SKILLS_DIR", filepath.Join(codexHome, "skills")),
+		opencodeSkillsDir: envDefault("OPENCODE_SKILLS_DIR", filepath.Join(home, ".config", "opencode", "skills")),
+		nvmDir:            nvmDir,
 	}
 }
 

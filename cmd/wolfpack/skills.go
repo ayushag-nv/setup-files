@@ -88,7 +88,10 @@ func installSkills(cfg config) error {
 	if err := installSkillsToDir(sourceDir, "Claude Code", cfg.claudeSkillsDir); err != nil {
 		return err
 	}
-	return installSkillsToDir(sourceDir, "Codex", cfg.codexSkillsDir)
+	if err := installSkillsToDir(sourceDir, "Codex", cfg.codexSkillsDir); err != nil {
+		return err
+	}
+	return installSkillsToDir(sourceDir, "OpenCode", cfg.opencodeSkillsDir)
 }
 
 func availableSkills(sourceDir string) ([]string, error) {

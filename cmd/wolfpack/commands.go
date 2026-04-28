@@ -62,8 +62,8 @@ func usage() {
 	fmt.Print(`wolfpack
 
 Usage:
-  wolfpack install [all|claude|codex|code|skills]
-  wolfpack versions [claude|codex|code]
+  wolfpack install [all|claude|codex|code|opencode|skills]
+  wolfpack versions [claude|codex|code|opencode]
   wolfpack skills [install|list]
   wolfpack keys
   wolfpack deps
@@ -71,7 +71,7 @@ Usage:
   wolfpack help
 
 Defaults:
-  install all     Installs Claude Code, Codex CLI, skills, and prompts for API keys.
+  install all     Installs Claude Code, Codex CLI, OpenCode, skills, and prompts for API keys.
   codex/code      Both target the OpenAI Codex CLI npm package.
 
 Environment:
@@ -82,6 +82,7 @@ Environment:
   WOLFPACK_SKILLS_SOURCE    Local ai-skills checkout to install from instead of fetching
   CLAUDE_SKILLS_DIR         Claude Code skills destination (default: ~/.claude/skills)
   CODEX_SKILLS_DIR          Codex skills destination (default: ${CODEX_HOME:-~/.codex}/skills)
+  OPENCODE_SKILLS_DIR       OpenCode skills destination (default: ~/.config/opencode/skills)
   NVM_VERSION               nvm release tag override, such as v0.40.3
 `)
 }
@@ -94,6 +95,8 @@ func normalizeTarget(target string) (string, error) {
 		return "claude", nil
 	case "codex", "code", "openai-code", "openai-codex":
 		return "codex", nil
+	case "opencode", "open-code":
+		return "opencode", nil
 	case "skills", "skill":
 		return "skills", nil
 	default:
@@ -119,11 +122,12 @@ wolfpack
   1) Install everything
   2) Install Claude Code
   3) Install OpenAI Codex CLI
-  4) Configure API keys
-  5) Install skills
-  6) Doctor
-  7) Quit
-Choose an option [1-7]: `)
+  4) Install OpenCode CLI
+  5) Configure API keys
+  6) Install skills
+  7) Doctor
+  8) Quit
+Choose an option [1-8]: `)
 		choice, _ := reader.ReadString('\n')
 		switch strings.TrimSpace(choice) {
 		case "1":
@@ -133,15 +137,17 @@ Choose an option [1-7]: `)
 		case "3":
 			return installCodex(cfg)
 		case "4":
-			return configureKeys(cfg)
+			return installOpenCode(cfg)
 		case "5":
-			return installSkills(cfg)
+			return configureKeys(cfg)
 		case "6":
+			return installSkills(cfg)
+		case "7":
 			return doctor(cfg)
-		case "7", "q", "Q":
+		case "8", "q", "Q":
 			return nil
 		default:
-			warn("choose a number from 1 to 7")
+			warn("choose a number from 1 to 8")
 		}
 	}
 }

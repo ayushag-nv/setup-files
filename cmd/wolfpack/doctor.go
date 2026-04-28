@@ -42,8 +42,15 @@ func doctor(cfg config) error {
 	} else {
 		fmt.Println("codex: missing")
 	}
+	if commandExistsWithNVM(cfg, "opencode") {
+		out, _ := captureShellWithNVM(cfg, "opencode --version")
+		fmt.Printf("opencode: %s\n", strings.TrimSpace(out))
+	} else {
+		fmt.Println("opencode: missing")
+	}
 	fmt.Printf("claude skills dir: %s\n", cfg.claudeSkillsDir)
 	fmt.Printf("codex skills dir: %s\n", cfg.codexSkillsDir)
+	fmt.Printf("opencode skills dir: %s\n", cfg.opencodeSkillsDir)
 	fmt.Printf("api key rc file: %s\n", cfg.rcFile)
 	return nil
 }

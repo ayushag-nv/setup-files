@@ -2,6 +2,28 @@ package main
 
 import "fmt"
 
+type npmTool struct {
+	target      string
+	label       string
+	packageName string
+	binaryName  string
+}
+
+var npmTools = []npmTool{
+	{target: "claude", label: "Claude Code", packageName: claudePackage, binaryName: "claude"},
+	{target: "codex", label: "OpenAI Codex CLI", packageName: codexPackage, binaryName: "codex"},
+	{target: "opencode", label: "OpenCode CLI", packageName: opencodePackage, binaryName: "opencode"},
+}
+
+func npmToolByTarget(target string) (npmTool, bool) {
+	for _, tool := range npmTools {
+		if tool.target == target {
+			return tool, true
+		}
+	}
+	return npmTool{}, false
+}
+
 func installTarget(cfg config, target string) error {
 	normalized, err := normalizeTarget(target)
 	if err != nil {
@@ -16,6 +38,9 @@ func installTarget(cfg config, target string) error {
 		if err := installCodex(cfg); err != nil {
 			return err
 		}
+		if err := installOpenCode(cfg); err != nil {
+			return err
+		}
 		if err := installSkills(cfg); err != nil {
 			return err
 		}
@@ -24,6 +49,8 @@ func installTarget(cfg config, target string) error {
 		return installClaude(cfg)
 	case "codex":
 		return installCodex(cfg)
+	case "opencode":
+		return installOpenCode(cfg)
 	case "skills":
 		return installSkills(cfg)
 	default:
@@ -32,11 +59,23 @@ func installTarget(cfg config, target string) error {
 }
 
 func installClaude(cfg config) error {
-	return installNPMTool(cfg, "Claude Code", claudePackage, "claude")
+	return installNPMTarget(cfg, "claude")
 }
 
 func installCodex(cfg config) error {
-	return installNPMTool(cfg, "OpenAI Codex CLI", codexPackage, "codex")
+	return installNPMTarget(cfg, "codex")
+}
+
+func installOpenCode(cfg config) error {
+	return installNPMTarget(cfg, "opencode")
+}
+
+func installNPMTarget(cfg config, target string) error {
+	tool, ok := npmToolByTarget(target)
+	if !ok {
+		return fmt.Errorf("unknown npm target: %s", target)
+	}
+	return installNPMTool(cfg, tool.label, tool.packageName, tool.binaryName)
 }
 
 func ensureDeps(cfg config) error {

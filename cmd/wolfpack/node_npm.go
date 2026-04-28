@@ -335,11 +335,15 @@ func listVersions(cfg config, target string) error {
 	}
 	switch normalized {
 	case "all":
-		if err := listVersions(cfg, "claude"); err != nil {
-			return err
+		for i, tool := range npmTools {
+			if i > 0 {
+				fmt.Println()
+			}
+			if err := listVersions(cfg, tool.target); err != nil {
+				return err
+			}
 		}
-		fmt.Println()
-		return listVersions(cfg, "codex")
+		return nil
 	case "skills":
 		return listSkills(cfg)
 	}
@@ -347,19 +351,15 @@ func listVersions(cfg config, target string) error {
 	if err := ensureNode(cfg); err != nil {
 		return err
 	}
-	var label, packageName string
-	if normalized == "claude" {
-		label = "Claude Code"
-		packageName = claudePackage
-	} else {
-		label = "OpenAI Codex CLI"
-		packageName = codexPackage
+	tool, ok := npmToolByTarget(normalized)
+	if !ok {
+		return fmt.Errorf("unknown npm target: %s", target)
 	}
-	latest, versions, err := npmVersionsForPackage(packageName, cfg.versionLimit)
+	latest, versions, err := npmVersionsForPackage(tool.packageName, cfg.versionLimit)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s npm versions:\n", label)
+	fmt.Printf("%s npm versions:\n", tool.label)
 	fmt.Printf("latest: %s\n", latest)
 	for _, version := range versions {
 		fmt.Printf("  %s\n", version)

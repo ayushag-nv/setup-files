@@ -6,6 +6,7 @@ It currently installs:
 
 - Claude Code from `@anthropic-ai/claude-code`
 - OpenAI Codex CLI from `@openai/codex` (`code` is accepted as an alias)
+- OpenCode CLI from `opencode-ai`
 - Shared AI skills from `https://github.com/ayushag-nv/ai-skills`
 - API keys into `~/.bashrc`, including `NVIDIA_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY`
 
@@ -45,6 +46,7 @@ Install one tool:
 wolfpack install claude
 wolfpack install codex
 wolfpack install code
+wolfpack install opencode
 wolfpack install skills
 ```
 
@@ -53,6 +55,7 @@ List available versions fetched from the npm registry:
 ```bash
 wolfpack versions claude
 wolfpack versions codex
+wolfpack versions opencode
 ```
 
 During installation, the CLI shows recent versions plus `latest`; you can also type an exact npm version that is not in the displayed list.
@@ -64,7 +67,7 @@ wolfpack skills install
 wolfpack skills list
 ```
 
-Skills are installed into `~/.claude/skills` and `${CODEX_HOME:-~/.codex}/skills`. The bundle excludes permission-bypass skills such as `ultimate-auto` and `ultimate-bypass`.
+Skills are installed into `~/.claude/skills`, `${CODEX_HOME:-~/.codex}/skills`, and `~/.config/opencode/skills`. The bundle excludes permission-bypass skills such as `ultimate-auto` and `ultimate-bypass`.
 
 Configure API keys:
 

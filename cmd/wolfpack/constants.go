@@ -2,9 +2,10 @@ package main
 
 const (
 	cliName          = "wolfpack"
-	cliVersion       = "0.4.0"
+	cliVersion       = "0.5.0"
 	claudePackage    = "@anthropic-ai/claude-code"
 	codexPackage     = "@openai/codex"
+	opencodePackage  = "opencode-ai"
 	minNodeMajor     = 18
 	beginMarker      = "# >>> wolfpack managed env >>>"
 	endMarker        = "# <<< wolfpack managed env <<<"
