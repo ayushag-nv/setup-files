@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 CLI_NAME="ai-dev-setup"
-CLI_VERSION="0.1.1"
+CLI_VERSION="0.1.2"
 
 CLAUDE_PACKAGE="@anthropic-ai/claude-code"
 CODEX_PACKAGE="@openai/codex"
@@ -11,6 +11,8 @@ DEFAULT_VERSION_LIMIT="${AI_SETUP_VERSION_LIMIT:-20}"
 RC_FILE="${AI_SETUP_RC:-$HOME/.bashrc}"
 BEGIN_MARKER="# >>> ai-dev-setup managed env >>>"
 END_MARKER="# <<< ai-dev-setup managed env <<<"
+WRAPPER_BEGIN_MARKER="# >>> ai-dev-setup shell wrapper >>>"
+WRAPPER_END_MARKER="# <<< ai-dev-setup shell wrapper <<<"
 
 log() {
   printf '%s\n' "$*"
@@ -156,6 +158,46 @@ ensure_path_entry_in_rc() {
     printf '%s\n' "$line"
   } >>"$rc_file"
   log "Updated $rc_file to add $path_entry to PATH."
+}
+
+install_shell_wrapper() {
+  local rc_file="${1:-$RC_FILE}"
+  local rc_dir tmp quoted_rc
+
+  rc_dir="$(dirname "$rc_file")"
+  mkdir -p "$rc_dir"
+  touch "$rc_file"
+  quoted_rc="$(shell_quote "$rc_file")"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/ai-dev-setup.XXXXXX")"
+
+  awk \
+    -v begin="$WRAPPER_BEGIN_MARKER" \
+    -v end="$WRAPPER_END_MARKER" '
+      $0 == begin { skip = 1; next }
+      $0 == end { skip = 0; next }
+      !skip { print }
+    ' "$rc_file" >"$tmp"
+
+  {
+    cat "$tmp"
+    printf '\n%s\n' "$WRAPPER_BEGIN_MARKER"
+    printf 'ai-dev-setup() {\n'
+    printf '  command ai-dev-setup "$@"\n'
+    printf '  local status=$?\n'
+    printf '  case "${1:-}" in\n'
+    printf '    install|deps|keys)\n'
+    printf '      if [ "$status" -eq 0 ] && [ -f %s ]; then\n' "$quoted_rc"
+    printf '        . %s\n' "$quoted_rc"
+    printf '      fi\n'
+    printf '      ;;\n'
+    printf '  esac\n'
+    printf '  return "$status"\n'
+    printf '}\n'
+    printf '%s\n' "$WRAPPER_END_MARKER"
+  } >"$rc_file"
+
+  rm -f "$tmp"
+  log "Updated $rc_file so ai-dev-setup refreshes this shell after setup commands."
 }
 
 ensure_nvm_shell_init() {
@@ -447,8 +489,9 @@ install_npm_tool() {
     warn "$label install completed, but '$binary_name' is not on PATH in this shell"
   fi
 
+  install_shell_wrapper "$RC_FILE"
   maybe_source_bashrc_from_shell_profile
-  log "Reload your shell with: source $RC_FILE"
+  log "For this terminal, run once: source $RC_FILE"
 }
 
 install_claude() {
@@ -625,6 +668,7 @@ configure_keys() {
     configure_one_key "$custom_key"
   done
 
+  install_shell_wrapper "$RC_FILE"
   maybe_source_bashrc_from_shell_profile
   log "Reload with: source $RC_FILE"
 }
@@ -724,9 +768,10 @@ ensure_deps() {
   ensure_fetcher
   ensure_node
   ensure_npm_cli_path
+  install_shell_wrapper "$RC_FILE"
   maybe_source_bashrc_from_shell_profile
   log "Dependencies are ready."
-  log "Reload your shell with: source $RC_FILE"
+  log "For this terminal, run once: source $RC_FILE"
 }
 
 interactive_menu() {

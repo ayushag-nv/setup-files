@@ -75,7 +75,7 @@ If an install reports success but the command is not available in your shell, re
 source ~/.bashrc
 ```
 
-`ai-dev-setup deps` and `ai-dev-setup install ...` also make sure `~/.bashrc` loads `nvm` or includes the npm global `bin` path for future shells.
+`ai-dev-setup deps` and `ai-dev-setup install ...` also make sure `~/.bashrc` loads `nvm` or includes the npm global `bin` path for future shells. They also install a shell wrapper so future `ai-dev-setup install`, `ai-dev-setup deps`, and `ai-dev-setup keys` runs automatically re-source `~/.bashrc` after successful setup changes.
 
 ## Notes
 
